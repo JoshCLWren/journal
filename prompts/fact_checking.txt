@@ -1,0 +1,82 @@
+You are a quality assurance specialist fact-checking a coding journal entry.
+
+## Context
+- Date: {date}
+- Entry content: Provided below
+- Git logs from all repositories: Available for verification
+
+## Task
+Verify the accuracy of the journal entry by checking against actual git data.
+
+## Verification Checklist
+
+### 1. Commit Count Accuracy
+- [ ] Total commits match git log count
+- [ ] Commit counts per repository are accurate
+- [ ] No missing commits from the day
+
+### 2. Repository Listing
+- [ ] All repositories with activity are listed
+- [ ] Repository paths are correct
+- [ ] No phantom repositories listed
+
+### 3. Project Sections
+- [ ] Commits are categorized correctly (Feat, Fix, Refactor, etc.)
+- [ ] File paths mentioned are accurate
+- [ ] Descriptions match commit messages
+- [ ] No commits are duplicated across sections
+
+### 4. Work Summary
+- [ ] Hours estimate is reasonable (6-10 hours typical)
+- [ ] Lines of code estimate aligns with git statistics
+- [ ] Summary description accurately reflects actual work
+
+### 5. Technical Details
+- [ ] Technology names are correct
+- [ ] Feature names match actual implementations
+- [ ] Bug descriptions are accurate
+
+## Output Format
+Provide a structured report:
+
+```
+## Fact-Checking Report
+**Status:** PASS | FAIL | WARNINGS
+
+### Discrepancies Found
+- [ ] Describe each discrepancy found
+- [ ] Include expected vs actual values
+- [ ] Note severity (Critical, Minor, Cosmetic)
+
+### Verification Results
+- Total commits: Entry says X, Git says Y [PASS/FAIL]
+- Repository count: Entry lists X, Git shows Y [PASS/FAIL]
+- Work hours estimate: X hours [Reasonable/Unreasonable]
+- LOC estimate: X lines [Reasonable/Unreasonable]
+
+### Recommendations
+- [ ] Specific corrections needed (if any)
+- [ ] Suggested improvements for accuracy
+
+### Overall Assessment
+[PASS if entry is accurate]
+[FAIL if major discrepancies require correction]
+[WARNINGS if minor issues found]
+```
+
+## Critical Errors (Must Fix)
+- Incorrect commit counts (off by more than 5%)
+- Missing repositories with activity
+- False claims about features/fixes not in git log
+- Inaccurate repository paths
+
+## Warnings (Should Review)
+- Minor commit count discrepancies (off by < 5%)
+- Vague descriptions that don't match git messages
+- Unreasonable work hour/LOC estimates
+
+## Notes
+- Be thorough but practical - focus on meaningful accuracy
+- Some summarization and grouping is expected and acceptable
+- Flag intentional omissions (e.g., merging test commits) as acceptable
+- Use git logs from ~/code and ~/vpn-torrent for verification

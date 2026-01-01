@@ -59,7 +59,7 @@ python3 ~/.local/share/journal-automation/main.py status --date YYYY-MM-DD
 bash ~/.local/share/journal-automation/cron-setup.sh
 
 # Or manually add to crontab:
-25 11 * * * /usr/bin/python3 ~/.local/share/journal-automation/main.py run --date $(date +\%Y-\%m-\%d) >> /var/log/journal-automation.log 2>&1
+25 11 * * * /usr/bin/python3 ~/.local/share/journal-automation/main.py run --date $(date +\%Y-\%m-\%d) >> ~/.local/share/journal-automation/logs/journal.log 2>&1
 ```
 
 ## Agents
@@ -161,6 +161,8 @@ Edit `~/.journalrc`:
 
 All logs stored at: `~/.local/share/journal-automation/logs/`
 
+- `journal.log` - Main journal automation log (cron output)
+- `journal-automation-YYYYMMDD.log` - Daily rotation logs (Python logging)
 - `orchestrator.log` - Main coordination logs
 - `agent_errors.log` - Agent failure details
 - `notifications.log` - Desktop notification history
