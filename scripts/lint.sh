@@ -53,5 +53,15 @@ if ! pyright .; then
     exit 1
 fi
 
+# Run markdown linting
+echo ""
+echo "Running pymarkdown markdown linting..."
+if ! .venv/bin/python -m pymarkdown -d MD013,MD022,MD031,MD032,MD036,MD040,MD041,MD026 scan -r README.md AGENTS.md CONTRIBUTING.md AUTOMATION_README.md TEST_SUMMARY.md .github/ prompts/ 2>/dev/null; then
+    echo ""
+    echo "${RED}ERROR: Markdown linting failed.${NC}"
+    echo "${RED}Please fix the markdown errors and check CONTRIBUTING.md for guidelines.${NC}"
+    exit 1
+fi
+
 echo ""
 echo "${GREEN}All checks passed!${NC}"

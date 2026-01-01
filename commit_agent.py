@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Commit Agent for staging and committing journal entries."""
 
-import sys
-import os
+import logging
 from datetime import datetime
 from pathlib import Path
-import logging
 
 from config import get_config
 
@@ -16,6 +14,7 @@ class CommitAgent:
     """Agent responsible for staging and committing journal entries."""
 
     def __init__(self):
+        """Initialize CommitAgent with config."""
         config = get_config()
         self.journal_repo = Path(config["general"]["journal_directory"]).expanduser()
         self.auto_push = config["scheduling"].get("auto_push", False)
@@ -47,14 +46,19 @@ class CommitAgent:
             logger.info(f"Staging and committing entry: {entry_path}")
 
             try:
-                from git_utils import stage_and_commit
+                from utils.git_utils import stage_and_commit
 
-                result = stage_and_commit(
-                    repo_path=str(self.journal_repo),
-                    file_path=str(entry_path),
-                    commit_message=self._generate_commit_message(date),
+                success = stage_and_commit(
+                    repo_path=self.journal_repo,
+                    file_path=entry_path,
+                    message=self._generate_commit_message(date),
                 )
-                return result
+                return {
+                    "success": success,
+                    "commit_hash": None,
+                    "message": self._generate_commit_message(date),
+                    "error": None,
+                }
             except ImportError:
                 logger.warning(
                     "git_utils.stage_and_commit not available, using direct git commands"
@@ -108,9 +112,7 @@ class CommitAgent:
                     "error": f"Git commit failed: {result.stderr}",
                 }
 
-            commit_hash = (
-                result.stdout.strip().split()[1] if " " in result.stdout else None
-            )
+            commit_hash = result.stdout.strip().split()[1] if " " in result.stdout else None
 
             if self.auto_push:
                 self._push_changes()

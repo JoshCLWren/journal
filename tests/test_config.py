@@ -1,8 +1,8 @@
 """Test configuration management."""
 
-from pathlib import Path
-import tempfile
 import json
+import tempfile
+from pathlib import Path
 
 
 def test_default_config_structure():
@@ -18,8 +18,6 @@ def test_default_config_structure():
 
 def test_config_save_and_load():
     """Test that config can be saved and loaded correctly."""
-    from config import load_config, save_config
-
     # Create a test config
     test_config = {
         "general": {
@@ -34,7 +32,7 @@ def test_config_save_and_load():
         json.dump(test_config, f)
 
     # Load and verify
-    with open(temp_path, "r") as f:
+    with open(temp_path) as f:
         loaded = json.load(f)
 
     assert loaded == test_config

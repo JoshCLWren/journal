@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """Orchestrator - Coordinates all agents for journal automation."""
 
-import asyncio
 import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agents.git_analysis import GitAnalysisAgent
 from agents.content_generation import ContentGenerationAgent
-from opencode_client import OpenCodeClient
+from agents.git_analysis import GitAnalysisAgent
 from config import get_config
+from opencode_client import OpenCodeClient
 from utils.git_utils import stage_and_commit
 from utils.opencode_utils import ensure_opencode_running
 
@@ -22,12 +21,13 @@ class FactCheckingAgent:
     """Placeholder for FactCheckingAgent."""
 
     def __init__(self):
+        """Initialize FactCheckingAgent with config and OpenCode client."""
         self.config = get_config()
         self.client = OpenCodeClient(base_url=self.config["scheduling"]["opencode_url"])
 
     def verify_facts(self, content: str, git_data: dict) -> dict:
         """Verify facts in generated content."""
-        print(f"\n🔍 Fact Checking Agent: Verifying facts")
+        print("\n🔍 Fact Checking Agent: Verifying facts")
 
         result = {"status": "pending", "findings": []}
 
@@ -86,12 +86,13 @@ class QualityAssuranceAgent:
     """Placeholder for QualityAssuranceAgent."""
 
     def __init__(self):
+        """Initialize QualityAssuranceAgent with config and OpenCode client."""
         self.config = get_config()
         self.client = OpenCodeClient(base_url=self.config["scheduling"]["opencode_url"])
 
     def check_quality(self, content: str, git_data: dict) -> dict:
         """Check quality of generated content."""
-        print(f"\n✅ Quality Assurance Agent: Checking quality")
+        print("\n✅ Quality Assurance Agent: Checking quality")
 
         result = {"status": "pending", "checks": {}}
 
@@ -157,17 +158,16 @@ class Orchestrator:
     """Main orchestrator that coordinates all agents."""
 
     def __init__(self):
+        """Initialize Orchestrator with config and all sub-agents."""
         self.config = get_config()
         self.git_agent = GitAnalysisAgent()
         self.content_agent = ContentGenerationAgent()
         self.fact_check_agent = FactCheckingAgent()
         self.qa_agent = QualityAssuranceAgent()
-        self.opencode_client = OpenCodeClient(
-            base_url=self.config["scheduling"]["opencode_url"]
-        )
+        self.opencode_client = OpenCodeClient(base_url=self.config["scheduling"]["opencode_url"])
         self.journal_dir = Path(self.config["general"]["journal_directory"])
 
-    def run_day(self, date: str) -> Dict[str, Any]:
+    def run_day(self, date: str) -> dict[str, Any]:
         """Run all agents for a specific day.
 
         Args:
@@ -216,9 +216,7 @@ class Orchestrator:
             content = content_result["full_markdown"]
             entry_path = self._get_entry_path(date)
 
-            summary["stages"]["fact_checking"] = self._run_fact_checking(
-                content, git_data, summary
-            )
+            summary["stages"]["fact_checking"] = self._run_fact_checking(content, git_data, summary)
 
             summary["stages"]["quality_assurance"] = self._run_quality_assurance(
                 content, git_data, summary
@@ -261,10 +259,8 @@ class Orchestrator:
                 data_file.write_text(json.dumps(git_data, indent=2))
 
                 if self.config["quality"]["commit_as_they_go"]:
-                    stage_and_commit(
-                        self.journal_dir, data_file, f"git-analysis: Data for {date}"
-                    )
-                    print(f"  ✓ Committed git_data.json")
+                    stage_and_commit(self.journal_dir, data_file, f"git-analysis: Data for {date}")
+                    print("  ✓ Committed git_data.json")
 
                 return result
 
@@ -312,7 +308,7 @@ class Orchestrator:
                             entry_path,
                             f"draft: Journal entry for {git_data['date']}",
                         )
-                        print(f"  ✓ Committed content.md")
+                        print("  ✓ Committed content.md")
 
                 return result
 
@@ -328,9 +324,7 @@ class Orchestrator:
                         continue
                     elif decision == "use_fallback":
                         result["status"] = "fallback"
-                        result["full_markdown"] = self._generate_fallback_content(
-                            git_data
-                        )
+                        result["full_markdown"] = self._generate_fallback_content(git_data)
                         return result
                     else:
                         result["status"] = "failed"
@@ -343,9 +337,7 @@ class Orchestrator:
         summary["errors"].append(result["error"])
         return result
 
-    def _run_parallel_checks(
-        self, content: str, git_data: dict, summary: dict
-    ) -> tuple:
+    def _run_parallel_checks(self, content: str, git_data: dict, summary: dict) -> tuple:
         """Run fact checking and QA in parallel using threading."""
         from concurrent.futures import ThreadPoolExecutor
 
@@ -373,9 +365,7 @@ class Orchestrator:
             result["error"] = str(e)
             return result
 
-    def _run_quality_assurance(
-        self, content: str, git_data: dict, summary: dict
-    ) -> dict:
+    def _run_quality_assurance(self, content: str, git_data: dict, summary: dict) -> dict:
         """Run QualityAssuranceAgent."""
         if not self.config["quality"]["parallel_agents"]:
             return self.qa_agent.check_quality(content, git_data)
@@ -420,9 +410,9 @@ class Orchestrator:
 
             if success:
                 summary["commit_hash"] = "committed"
-                print(f"  ✓ Final entry committed")
+                print("  ✓ Final entry committed")
             else:
-                print(f"  ⚠️  Failed to commit final entry")
+                print("  ⚠️  Failed to commit final entry")
 
         except Exception as e:
             print(f"  ⚠️  Commit error: {e}")
@@ -433,7 +423,7 @@ class Orchestrator:
         date_obj = datetime.strptime(date, "%Y-%m-%d")
         return self.journal_dir / date_obj.strftime("%Y/%m/%d.md")
 
-    def _get_opencode_decision(self, situation: str, options: List[str]) -> str:
+    def _get_opencode_decision(self, situation: str, options: list[str]) -> str:
         """Get decision from OpenCode LLM.
 
         Args:
@@ -467,9 +457,7 @@ Choose the best option. Respond ONLY with the option name, no additional comment
             return options[0]
 
         except Exception as e:
-            print(
-                f"⚠️  Failed to get OpenCode decision: {e}, using default: {options[0]}"
-            )
+            print(f"⚠️  Failed to get OpenCode decision: {e}, using default: {options[0]}")
             return options[0]
 
     def _generate_fallback_content(self, git_data: dict) -> str:
@@ -517,7 +505,7 @@ Choose the best option. Respond ONLY with the option name, no additional comment
             )
             print(f"🔔 Sent notification: {message}")
         except FileNotFoundError:
-            print(f"⚠️  notify-send not available, skipping notification")
+            print("⚠️  notify-send not available, skipping notification")
         except Exception as e:
             print(f"⚠️  Failed to send notification: {e}")
 

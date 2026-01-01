@@ -3,7 +3,6 @@
 
 import json
 from pathlib import Path
-from typing import Optional
 
 DEFAULT_CONFIG = {
     "general": {
@@ -60,7 +59,7 @@ def load_config() -> dict:
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG
 
-    with open(CONFIG_PATH, "r") as f:
+    with open(CONFIG_PATH) as f:
         user_config = json.load(f)
 
     # Merge with defaults
