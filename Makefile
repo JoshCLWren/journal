@@ -34,7 +34,7 @@ sync:  ## Install dependencies
 	uv sync --all-extras
 
 venv:  ## Create virtual environment
-	uv venv
+	uv venv --python 3.13
 
 run:  ## Run the app
 	python main.py --help
