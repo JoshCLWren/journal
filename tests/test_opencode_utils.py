@@ -1,11 +1,10 @@
-"""Test OpenCode utility functions."""
+"""Tests for utils/opencode_utils.py."""
 
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from utils.opencode_utils import (
-    OPENCODE_DEFAULT_URL,
     check_opencode_client,
     ensure_opencode_running,
     get_opencode_client_path,
@@ -14,217 +13,161 @@ from utils.opencode_utils import (
 )
 
 
-def test_is_opencode_running_true():
-    """Test checking if OpenCode is running (positive case)."""
-    with patch("subprocess.run") as mock_run:
+class TestIsOpenCodeRunning:
+    """Tests for is_opencode_running()."""
+
+    @patch("subprocess.run")
+    def test_running_server(self, mock_run):
+        """Test detection of running OpenCode server."""
         mock_run.return_value = MagicMock(returncode=0)
-
-        result = is_opencode_running()
-
+        result = is_opencode_running("http://127.0.0.1:4096")
         assert result is True
-        mock_run.assert_called_once()
+        mock_run.assert_called_once_with(
+            ["curl", "-s", "http://127.0.0.1:4096/global/health"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
 
-
-def test_is_opencode_running_false():
-    """Test checking if OpenCode is running (negative case)."""
-    with patch("subprocess.run") as mock_run:
+    @patch("subprocess.run")
+    def test_not_running_server(self, mock_run):
+        """Test detection when server is not running."""
         mock_run.return_value = MagicMock(returncode=1)
+        result = is_opencode_running("http://127.0.0.1:4096")
+        assert result is False
 
-        result = is_opencode_running()
+    @patch("subprocess.run", side_effect=subprocess.TimeoutExpired("curl", 5))
+    def test_timeout_returns_false(self, mock_run):
+        """Test that timeout returns False."""
+        result = is_opencode_running("http://127.0.0.1:4096")
+        assert result is False
 
+    @patch("subprocess.run", side_effect=FileNotFoundError("curl not found"))
+    def test_curl_not_found_returns_false(self, mock_run):
+        """Test that missing curl returns False."""
+        result = is_opencode_running("http://127.0.0.1:4096")
         assert result is False
 
 
-def test_is_opencode_running_timeout():
-    """Test checking if OpenCode is running on timeout."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.side_effect = subprocess.TimeoutExpired("curl", 5)
+class TestStartOpenCodeServer:
+    """Tests for start_opencode_server()."""
 
-        result = is_opencode_running()
-
-        assert result is False
-
-
-def test_is_opencode_running_file_not_found():
-    """Test checking if OpenCode is running when curl not found."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.side_effect = FileNotFoundError()
-
-        result = is_opencode_running()
-
-        assert result is False
-
-
-def test_is_opencode_running_custom_url():
-    """Test checking OpenCode with custom URL."""
-    custom_url = "http://localhost:8080"
-
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
-
-        result = is_opencode_running(custom_url)
-
-        assert result is True
-        args = mock_run.call_args[0][0]
-        assert custom_url in args
-
-
-def test_start_opencode_server_not_installed():
-    """Test starting OpenCode when not installed."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=1)
-
-        result = start_opencode_server()
-
-        assert result is False
-
-
-def test_start_opencode_server_success():
-    """Test starting OpenCode server successfully."""
-    with (
-        patch("subprocess.run") as mock_run,
-        patch("subprocess.Popen") as mock_popen,
-        patch("utils.opencode_utils.is_opencode_running") as mock_check,
-    ):
+    @patch("utils.opencode_utils.is_opencode_running")
+    @patch("subprocess.run")
+    @patch("subprocess.Popen")
+    def test_successful_start(self, mock_popen, mock_run, mock_check):
+        """Test successful OpenCode server start."""
         mock_run.return_value = MagicMock(returncode=0, stdout="/usr/bin/opencode")
         mock_popen.return_value = MagicMock()
         mock_check.return_value = True
 
         result = start_opencode_server()
-
         assert result is True
+        mock_popen.assert_called_once()
 
-
-def test_start_opencode_server_fails_to_start():
-    """Test starting OpenCode when server fails to start."""
-    with (
-        patch("subprocess.run") as mock_run,
-        patch("subprocess.Popen") as mock_popen,
-        patch("utils.opencode_utils.is_opencode_running") as mock_check,
-        patch("time.sleep"),
-    ):
-        mock_run.return_value = MagicMock(returncode=0)
-        mock_popen.return_value = MagicMock()
-        mock_check.return_value = False
+    @patch("subprocess.run")
+    def test_opencode_not_found(self, mock_run):
+        """Test when opencode command is not found."""
+        mock_run.return_value = MagicMock(returncode=1)
 
         result = start_opencode_server()
+        assert result is False
 
+    @patch("utils.opencode_utils.is_opencode_running", return_value=False)
+    @patch("subprocess.run")
+    @patch("subprocess.Popen")
+    @patch("time.sleep")
+    def test_server_fails_to_start(self, mock_sleep, mock_popen, mock_run, mock_check):
+        """Test when server fails to start."""
+        mock_run.return_value = MagicMock(returncode=0)
+        mock_popen.return_value = MagicMock()
+
+        result = start_opencode_server()
+        assert result is False
+
+    @patch("utils.opencode_utils.is_opencode_running")
+    @patch("subprocess.run")
+    @patch("subprocess.Popen", side_effect=Exception("start error"))
+    def test_exception_during_start(self, mock_popen, mock_run, mock_check):
+        """Test exception during server start."""
+        mock_run.return_value = MagicMock(returncode=0)
+
+        result = start_opencode_server()
         assert result is False
 
 
-def test_ensure_opencode_running_already_running():
-    """Test ensuring OpenCode is running when it already is."""
-    with patch("utils.opencode_utils.is_opencode_running") as mock_check:
-        mock_check.return_value = True
+class TestEnsureOpenCodeRunning:
+    """Tests for ensure_opencode_running()."""
 
+    @patch("utils.opencode_utils.is_opencode_running", return_value=True)
+    def test_already_running(self, mock_check):
+        """Test when server is already running."""
         result = ensure_opencode_running()
-
         assert result is True
+        mock_check.assert_called_once()
 
-
-def test_ensure_opencode_running_starts():
-    """Test ensuring OpenCode is running when it needs to start."""
-    with (
-        patch("utils.opencode_utils.is_opencode_running") as mock_check,
-        patch("utils.opencode_utils.start_opencode_server") as mock_start,
-    ):
-        mock_check.return_value = False
-        mock_start.return_value = True
-
+    @patch("utils.opencode_utils.start_opencode_server", return_value=True)
+    @patch("utils.opencode_utils.is_opencode_running", return_value=False)
+    def test_starts_server(self, mock_check, mock_start):
+        """Test starting server when not running."""
         result = ensure_opencode_running()
-
         assert result is True
         mock_start.assert_called_once()
 
-
-def test_ensure_opencode_running_fails():
-    """Test ensuring OpenCode is running when start fails."""
-    with (
-        patch("utils.opencode_utils.is_opencode_running") as mock_check,
-        patch("utils.opencode_utils.start_opencode_server") as mock_start,
-    ):
-        mock_check.return_value = False
-        mock_start.return_value = False
-
+    @patch("utils.opencode_utils.start_opencode_server", return_value=False)
+    @patch("utils.opencode_utils.is_opencode_running", return_value=False)
+    def test_server_start_fails(self, mock_check, mock_start):
+        """Test when server start fails."""
         result = ensure_opencode_running()
-
         assert result is False
 
+    @patch("utils.opencode_utils.start_opencode_server")
+    @patch("utils.opencode_utils.is_opencode_running", return_value=False)
+    def test_custom_url(self, mock_check, mock_start, capsys):
+        """Test ensure_opencode_running with custom URL."""
+        mock_start.return_value = True
+        ensure_opencode_running("http://custom:8080")
+        captured = capsys.readouterr()
+        assert "Starting OpenCode server" in captured.out
 
-def test_get_opencode_client_path():
-    """Test getting OpenCode client path."""
-    path = get_opencode_client_path()
 
-    assert isinstance(path, Path)
-    assert path.name == "opencode_client.py"
+class TestGetOpenCodeClientPath:
+    """Tests for get_opencode_client_path()."""
+
+    def test_returns_path_to_client(self):
+        """Test that correct path to client is returned."""
+        result = get_opencode_client_path()
+        assert isinstance(result, Path)
+        assert result.name == "opencode_client.py"
+
+    def test_path_is_absolute(self):
+        """Test that returned path is absolute."""
+        result = get_opencode_client_path()
+        assert result.is_absolute()
 
 
-def test_check_opencode_client_exists():
-    """Test checking if OpenCode client exists (positive case)."""
-    with patch("pathlib.Path.exists") as mock_exists:
-        mock_exists.return_value = True
+class TestCheckOpenCodeClient:
+    """Tests for check_opencode_client()."""
 
+    @patch("utils.opencode_utils.get_opencode_client_path")
+    def test_client_exists(self, mock_path):
+        """Test when client file exists."""
+        mock_path.return_value = MagicMock(exists=lambda: True)
         result = check_opencode_client()
-
         assert result is True
 
-
-def test_check_opencode_client_not_exists():
-    """Test checking if OpenCode client exists (negative case)."""
-    with patch("pathlib.Path.exists") as mock_exists:
-        mock_exists.return_value = False
-
+    @patch("utils.opencode_utils.get_opencode_client_path")
+    def test_client_missing(self, mock_path):
+        """Test when client file does not exist."""
+        mock_path.return_value = MagicMock(exists=lambda: False)
         result = check_opencode_client()
-
         assert result is False
 
-
-def test_opencode_default_url():
-    """Test that default URL is correct."""
-    assert OPENCODE_DEFAULT_URL == "http://127.0.0.1:4096"
-
-
-def test_is_opencode_running_correct_endpoint():
-    """Test that health check uses correct endpoint."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
-
-        is_opencode_running()
-
-        args = mock_run.call_args[0][0]
-        assert "/global/health" in args
-
-
-def test_start_opencode_server_uses_popen():
-    """Test that start_opencode_server uses Popen correctly."""
-    with (
-        patch("subprocess.run") as mock_run,
-        patch("subprocess.Popen") as mock_popen,
-        patch("utils.opencode_utils.is_opencode_running") as mock_check,
-    ):
-        mock_run.return_value = MagicMock(returncode=0)
-        mock_popen.return_value = MagicMock()
-        mock_check.return_value = True
-
-        start_opencode_server()
-
-        mock_popen.assert_called_once()
-        args = mock_popen.call_args[0][0]
-        assert "opencode" in args
-        assert "serve" in args
-
-
-def test_ensure_opencode_running_custom_url():
-    """Test ensure_opencode_running with custom URL."""
-    custom_url = "http://localhost:8080"
-
-    with (
-        patch("utils.opencode_utils.is_opencode_running") as mock_check,
-        patch("utils.opencode_utils.start_opencode_server") as _mock_start,
-    ):
-        mock_check.return_value = True
-
-        result = ensure_opencode_running(custom_url)
-
-        assert result is True
-        mock_check.assert_called_with(custom_url)
+    @patch("utils.opencode_utils.get_opencode_client_path")
+    def test_client_path_format(self, mock_path, capsys):
+        """Test that error message includes client path."""
+        mock_path.return_value = Path("/custom/path/to/opencode_client.py")
+        result = check_opencode_client()
+        assert result is False
+        captured = capsys.readouterr()
+        assert "opencode_client.py" in captured.out

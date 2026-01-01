@@ -1,6 +1,6 @@
-"""Test Fact Checking Agent."""
+"""Tests for FactCheckingAgent."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -8,40 +8,26 @@ from agents.fact_checking import FactCheckingAgent
 
 
 @pytest.fixture
-def agent():
-    """Create FactCheckingAgent with mocked config."""
-    mock_config = {
-        "scheduling": {
-            "opencode_url": "http://127.0.0.1:4096",
-        },
-        "opencode": {
-            "model": "glm-4.7-free",
-            "provider": "opencode",
-        },
-    }
-
-    with patch("agents.fact_checking.get_config", return_value=mock_config):
-        with patch("agents.fact_checking.OpenCodeClient") as mock_client:
-            agent = FactCheckingAgent()
-            agent.client = mock_client.return_value
-            yield agent
+def fact_checking_agent():
+    """Create a FactCheckingAgent instance for testing."""
+    return FactCheckingAgent()
 
 
 @pytest.fixture
 def sample_git_data():
-    """Provide sample git data for testing."""
+    """Sample git data for testing."""
     return {
         "date": "2025-12-31",
         "is_work_day": True,
         "total_commits": 43,
-        "total_loc_added": 4000,
-        "total_loc_deleted": 800,
-        "estimated_hours": 8.5,
+        "total_loc_added": 1200,
+        "total_loc_deleted": 200,
+        "estimated_hours": 8.0,
         "repos": {
-            "test-repo": {
+            "comic-pile": {
                 "commits": 43,
-                "loc_added": 4000,
-                "loc_deleted": 800,
+                "loc_added": 1200,
+                "loc_deleted": 200,
                 "commits_by_category": {"feat": 25, "fix": 10, "refactor": 5, "docs": 3},
                 "top_features": ["feat(TASK-102): Add Staleness Awareness UI"],
             }
@@ -51,296 +37,321 @@ def sample_git_data():
 
 @pytest.fixture
 def valid_markdown():
-    """Provide valid markdown content."""
-    return """## 2025-12-31 (8.5 hours, 4800 LOC)
+    """Valid markdown content for testing."""
+    return """## 2025-12-31 (8.0 hours, 1400 LOC)
 
 ## Summary
-Worked on test-repo with significant feature additions.
+Test summary.
 
 ## Repositories Worked On
-- `~/code/test-repo` (43 commits)
+- `~/code/comic-pile` (43 commits)
+
 - **Total: 43 commits**
 
-## test-repo
+## comic-pile
 **Staleness Awareness**
-- Feat: Add Staleness Awareness UI
-- Fix: Update cache logic
+- feat: Add Staleness Awareness UI
+- fix: Update cache logic
 
 ---
-
 ## Projects Legend
-### test-repo
-Test repository description
-"""
+### comic-pile
+Test project description."""
 
 
-def test_check_entry_pass(agent, sample_git_data, valid_markdown):
-    """Test fact-checking a valid entry."""
-    agent.client.chat.return_value = {"content": "Entry is accurate and complete."}
+class TestFactCheckingAgent:
+    """Test suite for FactCheckingAgent."""
 
-    result = agent.check_entry(sample_git_data, valid_markdown)
+    @patch("agents.fact_checking.get_config")
+    @patch("agents.fact_checking.OpenCodeClient")
+    def test_init(self, mock_opencode, mock_get_config):
+        """Test FactCheckingAgent initialization."""
+        mock_get_config.return_value = {"scheduling": {"opencode_url": "http://localhost:4096"}}
 
-    assert result["status"] == "pass"
-    assert "checks" in result
-    assert "reasoning" in result
+        FactCheckingAgent()
 
+        mock_opencode.assert_called_once_with(base_url="http://localhost:4096")
 
-def test_check_entry_error(agent, sample_git_data):
-    """Test fact-checking with an error."""
-    with patch.object(agent, "_check_accuracy", side_effect=Exception("Test error")):
-        result = agent.check_entry(sample_git_data, "content")
-
-    assert result["status"] == "fail"
-    assert len(result["errors"]) > 0
-
-
-def test_check_accuracy_correct(agent, sample_git_data, valid_markdown):
-    """Test accuracy check with correct data."""
-    result = agent._check_accuracy(sample_git_data, valid_markdown)
-
-    assert result["passed"] is True
-    assert len(result["issues"]) == 0
-
-
-def test_check_accuracy_missing_commits(agent, sample_git_data):
-    """Test accuracy check with missing commit counts."""
-    markdown = """## Summary
-Test summary.
-"""
-
-    result = agent._check_accuracy(sample_git_data, markdown)
-
-    assert result["passed"] is False
-    assert len(result["issues"]) > 0
-    assert any("missing" in issue.lower() for issue in result["issues"])
-
-
-def test_check_accuracy_commit_count_mismatch(agent, sample_git_data):
-    """Test accuracy check with mismatched commit counts."""
-    markdown = """## Repositories Worked On
-- `~/code/test-repo` (10 commits)
-- **Total: 10 commits**
-"""
-
-    result = agent._check_accuracy(sample_git_data, markdown)
-
-    assert result["passed"] is False
-    assert any("mismatch" in issue.lower() for issue in result["issues"])
-
-
-def test_check_completeness_pass(agent, sample_git_data, valid_markdown):
-    """Test completeness check with all repos."""
-    result = agent._check_completeness(sample_git_data, valid_markdown)
-
-    assert result["passed"] is True
-
-
-def test_check_completeness_missing_section(agent, sample_git_data):
-    """Test completeness check with missing section."""
-    markdown = """## Summary
-Test summary.
-"""
-
-    result = agent._check_completeness(sample_git_data, markdown)
-
-    assert result["passed"] is False
-    assert any("Missing section" in issue for issue in result["issues"])
-
-
-def test_check_consistency_pass(agent, sample_git_data, valid_markdown):
-    """Test consistency check with consistent data."""
-    result = agent._check_consistency(sample_git_data, valid_markdown)
-
-    assert result["passed"] is True
-
-
-def test_check_consistency_loc_mismatch(agent, sample_git_data):
-    """Test consistency check with LOC mismatch."""
-    markdown = """## Summary
-Total of 100,000 lines of code.
-"""
-
-    result = agent._check_consistency(sample_git_data, markdown)
-
-    assert result["passed"] is False
-    assert any("LOC" in issue for issue in result["issues"])
-
-
-def test_check_consistency_date_missing(agent, sample_git_data):
-    """Test consistency check with missing date."""
-    markdown = """## Summary
-Test summary for today.
-"""
-
-    result = agent._check_consistency(sample_git_data, markdown)
-
-    assert result["passed"] is False
-    assert any("Date" in issue for issue in result["issues"])
-
-
-def test_check_duplicates_no_duplicates(agent):
-    """Test duplicate check with no duplicates."""
-    markdown = """## Section 1
-- Feat: feature 1
-- Fix: bug 1
-
-## Section 2
-- Feat: feature 2
-"""
-
-    result = agent._check_duplicates(markdown)
-
-    assert result["passed"] is True
-
-
-def test_check_duplicates_duplicate_sections(agent):
-    """Test duplicate check with duplicate sections."""
-    markdown = """## Section 1
-Content.
-
-## Section 1
-Duplicate content.
-"""
-
-    result = agent._check_duplicates(markdown)
-
-    assert result["passed"] is False
-    assert any("Duplicate section" in issue for issue in result["issues"])
-
-
-def test_check_duplicates_duplicate_commits(agent):
-    """Test duplicate check with duplicate commits."""
-    markdown = """## Section 1
-- Feat: feature 1
-- Feat: feature 1
-"""
-
-    result = agent._check_duplicates(markdown)
-
-    assert result["passed"] is False
-    assert any("Duplicate commit" in issue for issue in result["issues"])
-
-
-def test_check_anomalies_pass(agent, sample_git_data):
-    """Test anomaly check with no anomalies."""
-    markdown = "## Test\n\nContent."
-
-    result = agent._check_anomalies(sample_git_data, markdown)
-
-    # May have warnings, but should not have critical issues
-    assert isinstance(result["passed"], bool)
-
-
-def test_check_anomalies_no_loc(agent):
-    """Test anomaly check for repo with commits but no LOC."""
-    git_data = {
-        "repos": {
-            "test-repo": {
-                "commits": 10,
-                "loc_added": 0,
-            }
+    @patch("agents.fact_checking.get_config")
+    @patch("agents.fact_checking.OpenCodeClient")
+    def test_check_entry_valid(
+        self, mock_opencode, mock_get_config, sample_git_data, valid_markdown
+    ):
+        """Test check_entry with valid content."""
+        mock_get_config.return_value = {
+            "scheduling": {"opencode_url": "http://localhost:4096"},
+            "opencode": {"model": "test-model", "provider": "test-provider"},
         }
-    }
 
-    result = agent._check_anomalies(git_data, "content")
-
-    assert len(result["issues"]) > 0
-
-
-def test_check_anomalies_low_loc_per_commit(agent):
-    """Test anomaly check for low LOC/commit ratio."""
-    git_data = {
-        "repos": {
-            "test-repo": {
-                "commits": 10,
-                "loc_added": 10,
-            }
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {
+            "content": "Overall Assessment: EXCELLENT. All checks passed."
         }
-    }
+        mock_opencode.return_value = mock_client
 
-    result = agent._check_anomalies(git_data, "content")
+        fact_checking_agent = FactCheckingAgent()
 
-    assert len(result["issues"]) > 0
+        result = fact_checking_agent.check_entry(sample_git_data, valid_markdown)
 
+        assert result["status"] == "pass"
+        assert len(result["errors"]) == 0
+        assert "reasoning" in result
+        assert "checks" in result
 
-def test_check_anomalies_many_sections(agent):
-    """Test anomaly check for too many sections."""
-    markdown = "\n".join([f"## Section {i}" for i in range(25)])
+    @patch("agents.fact_checking.get_config")
+    @patch("agents.fact_checking.OpenCodeClient")
+    def test_check_entry_error_handling(self, mock_opencode, mock_get_config, sample_git_data):
+        """Test check_entry error handling."""
+        mock_get_config.return_value = {
+            "scheduling": {"opencode_url": "http://localhost:4096"},
+            "opencode": {"model": "test-model", "provider": "test-provider"},
+        }
 
-    result = agent._check_anomalies(sample_git_data(), markdown)
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = Exception("API error")
+        mock_opencode.return_value = mock_client
 
-    assert len(result["issues"]) > 0
+        fact_checking_agent = FactCheckingAgent()
 
+        result = fact_checking_agent.check_entry(sample_git_data, "markdown")
 
-def test_generate_llm_analysis(agent, sample_git_data, valid_markdown):
-    """Test LLM analysis generation."""
-    agent.client.chat.return_value = {"content": "Analysis: Entry is accurate."}
+        assert result["status"] == "fail"
+        assert len(result["errors"]) > 0
 
-    analysis = agent._generate_llm_analysis(
-        sample_git_data, valid_markdown, {"accuracy": {"passed": True}}
-    )
+    def test_check_accuracy_valid(self, fact_checking_agent, sample_git_data, valid_markdown):
+        """Test _check_accuracy with accurate data."""
+        result = fact_checking_agent._check_accuracy(sample_git_data, valid_markdown)
 
-    assert analysis == "Analysis: Entry is accurate."
-    agent.client.chat.assert_called_once()
+        assert result["passed"] is True
+        assert len(result["issues"]) == 0
 
+    def test_check_accuracy_commit_count_mismatch(self, fact_checking_agent, sample_git_data):
+        """Test _check_accuracy detects commit count mismatch."""
+        markdown = """## Repositories Worked On
+- `~/code/comic-pile` (10 commits)
+- **Total: 10 commits**"""
 
-def test_compile_results_pass(agent):
-    """Test compiling results with pass status."""
-    result = {
-        "errors": [],
-        "warnings": [],
-        "corrections": [],
-        "checks": {
+        result = fact_checking_agent._check_accuracy(sample_git_data, markdown)
+
+        assert result["passed"] is False
+        assert len(result["issues"]) > 0
+        assert "commit count mismatch" in result["issues"][0].lower()
+
+    def test_check_accuracy_missing_commit_count(self, fact_checking_agent, sample_git_data):
+        """Test _check_accuracy detects missing commit count."""
+        markdown = """## Repositories Worked On
+- `~/code/comic-pile`
+- **Total: 43 commits**"""
+
+        result = fact_checking_agent._check_accuracy(sample_git_data, markdown)
+
+        assert result["passed"] is False
+        assert len(result["issues"]) > 0
+
+    def test_check_completeness_valid(self, fact_checking_agent, sample_git_data, valid_markdown):
+        """Test _check_completeness with complete content."""
+        result = fact_checking_agent._check_completeness(sample_git_data, valid_markdown)
+
+        assert result["passed"] is True
+
+    def test_check_completeness_missing_section(self, fact_checking_agent, sample_git_data):
+        """Test _check_completeness detects missing repo section."""
+        markdown = """## Summary
+Test summary.
+## Repositories Worked On
+- `~/code/comic-pile` (43 commits)"""
+
+        result = fact_checking_agent._check_completeness(sample_git_data, markdown)
+
+        assert result["passed"] is False
+        assert len(result["issues"]) > 0
+        assert "Missing section header" in result["issues"][0]
+
+    def test_check_consistency_valid(self, fact_checking_agent, sample_git_data, valid_markdown):
+        """Test _check_consistency with consistent data."""
+        result = fact_checking_agent._check_consistency(sample_git_data, valid_markdown)
+
+        assert result["passed"] is True
+
+    def test_check_consistency_loc_mismatch(self, fact_checking_agent, sample_git_data):
+        """Test _check_consistency detects LOC mismatch."""
+        markdown = "Total LOC: 10000 lines of code"
+
+        result = fact_checking_agent._check_consistency(sample_git_data, markdown)
+
+        assert result["passed"] is False
+        assert len(result["issues"]) > 0
+        assert "LOC inconsistency" in result["issues"][0]
+
+    def test_check_consistency_date_missing(self, fact_checking_agent, sample_git_data):
+        """Test _check_consistency detects missing date."""
+        markdown = "Test content without date 2025-01-01"
+
+        result = fact_checking_agent._check_consistency(sample_git_data, markdown)
+
+        assert result["passed"] is False
+        assert "not found in markdown" in result["issues"][0]
+
+    def test_check_duplicates_valid(self, fact_checking_agent, valid_markdown):
+        """Test _check_duplicates with unique content."""
+        result = fact_checking_agent._check_duplicates(valid_markdown)
+
+        assert result["passed"] is True
+
+    def test_check_duplicates_sections(self, fact_checking_agent):
+        """Test _check_duplicates detects duplicate sections."""
+        markdown = """## Summary
+Test.
+## Summary
+Duplicate section."""
+
+        result = fact_checking_agent._check_duplicates(markdown)
+
+        assert result["passed"] is False
+        assert len(result["issues"]) > 0
+        assert "Duplicate section" in result["issues"][0]
+
+    def test_check_duplicates_commits(self, fact_checking_agent):
+        """Test _check_duplicates detects duplicate commits."""
+        markdown = """## Summary
+- feat: add feature
+- feat: add feature"""
+
+        result = fact_checking_agent._check_duplicates(markdown)
+
+        assert result["passed"] is False
+        assert len(result["issues"]) > 0
+        assert "Duplicate commit" in result["issues"][0]
+
+    def test_check_anomalies_valid(self, fact_checking_agent, sample_git_data, valid_markdown):
+        """Test _check_anomalies with normal data."""
+        result = fact_checking_agent._check_anomalies(sample_git_data, valid_markdown)
+
+        assert result["passed"] is True
+
+    def test_check_anomalies_zero_loc(self, fact_checking_agent):
+        """Test _check_anomalies detects zero LOC with commits."""
+        git_data = {"repos": {"test-repo": {"commits": 10, "loc_added": 0}}}
+
+        result = fact_checking_agent._check_anomalies(git_data, "test")
+
+        assert len(result["issues"]) > 0
+        assert "0 LOC added" in result["issues"][0]
+
+    def test_check_anomalies_low_loc_ratio(self, fact_checking_agent):
+        """Test _check_anomalies detects low LOC/commit ratio."""
+        git_data = {"repos": {"test-repo": {"commits": 10, "loc_added": 20}}}
+
+        result = fact_checking_agent._check_anomalies(git_data, "test")
+
+        assert len(result["issues"]) > 0
+        assert "low LOC/commit ratio" in result["issues"][0]
+
+    def test_check_anomalies_many_sections(self, fact_checking_agent):
+        """Test _check_anomalies detects too many sections."""
+        markdown = "\n".join([f"## Section {i}" for i in range(25)])
+
+        result = fact_checking_agent._check_anomalies({}, markdown)
+
+        assert len(result["issues"]) > 0
+        assert "Unusually many sections" in result["issues"][0]
+
+    @patch("agents.fact_checking.get_config")
+    @patch("agents.fact_checking.OpenCodeClient")
+    def test_generate_llm_analysis(self, mock_opencode, mock_get_config, sample_git_data):
+        """Test _generate_llm_analysis."""
+        mock_get_config.return_value = {
+            "scheduling": {"opencode_url": "http://localhost:4096"},
+            "opencode": {"model": "test-model", "provider": "test-provider"},
+        }
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {"content": "Overall Assessment: GOOD. All checks passed."}
+        mock_opencode.return_value = mock_client
+
+        fact_checking_agent = FactCheckingAgent()
+
+        checks = {
             "accuracy": {"passed": True, "issues": []},
             "completeness": {"passed": True, "issues": []},
-        },
-    }
+        }
 
-    agent._compile_results(result)
+        result = fact_checking_agent._generate_llm_analysis(
+            sample_git_data, "markdown content", checks
+        )
 
-    assert result["status"] == "pass"
+        assert "Overall Assessment" in result
 
+    @patch("agents.fact_checking.get_config")
+    @patch("agents.fact_checking.OpenCodeClient")
+    def test_generate_llm_analysis_error(self, mock_opencode, mock_get_config, sample_git_data):
+        """Test _generate_llm_analysis error handling."""
+        mock_get_config.return_value = {
+            "scheduling": {"opencode_url": "http://localhost:4096"},
+            "opencode": {"model": "test-model", "provider": "test-provider"},
+        }
 
-def test_compile_results_fail(agent):
-    """Test compiling results with fail status."""
-    result = {
-        "errors": ["Critical error"],
-        "warnings": [],
-        "corrections": [],
-        "checks": {
-            "accuracy": {"passed": False, "issues": ["Error"]},
-        },
-    }
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = Exception("API error")
+        mock_opencode.return_value = mock_client
 
-    agent._compile_results(result)
+        fact_checking_agent = FactCheckingAgent()
 
-    assert result["status"] == "fail"
+        checks = {"accuracy": {"passed": True, "issues": []}}
 
+        result = fact_checking_agent._generate_llm_analysis(
+            sample_git_data, "markdown content", checks
+        )
 
-def test_compile_results_warnings(agent):
-    """Test compiling results with warnings."""
-    result = {
-        "errors": [],
-        "warnings": ["Warning"],
-        "corrections": [],
-        "checks": {
-            "accuracy": {"passed": True, "issues": []},
-        },
-    }
+        assert "LLM analysis failed" in result
 
-    agent._compile_results(result)
+    def test_compile_results_pass(self, fact_checking_agent):
+        """Test _compile_results with all checks passing."""
+        result = {
+            "status": "pass",
+            "errors": [],
+            "warnings": [],
+            "corrections": [],
+            "checks": {
+                "accuracy": {"passed": True, "issues": []},
+                "completeness": {"passed": True, "issues": []},
+            },
+        }
 
-    assert result["status"] == "pass_with_warnings"
+        fact_checking_agent._compile_results(result)
 
+        assert result["status"] == "pass"
 
-def test_check_entry_pass_with_warnings(agent, sample_git_data, valid_markdown):
-    """Test fact-checking that passes with warnings."""
-    agent.client.chat.return_value = {"content": "Entry is mostly accurate."}
+    def test_compile_results_fail(self, fact_checking_agent):
+        """Test _compile_results with errors."""
+        result = {
+            "status": "pass",
+            "errors": [],
+            "warnings": [],
+            "corrections": [],
+            "checks": {
+                "accuracy": {"passed": False, "issues": ["Test error"], "corrections": []},
+            },
+        }
 
-    # Modify markdown to create a warning (not a critical error)
-    markdown = valid_markdown + "\n\nToo many blank lines\n\n\n\n\n\n"
+        fact_checking_agent._compile_results(result)
 
-    result = agent.check_entry(sample_git_data, markdown)
+        assert result["status"] == "fail"
+        assert len(result["errors"]) > 0
 
-    # Should not fail completely, but may have warnings
-    assert result["status"] in ["pass", "pass_with_warnings"]
+    def test_compile_results_warnings(self, fact_checking_agent):
+        """Test _compile_results with warnings."""
+        result = {
+            "status": "pass",
+            "errors": [],
+            "warnings": [],
+            "corrections": [],
+            "checks": {
+                "accuracy": {"passed": True, "issues": [], "warnings": ["Test warning"]},
+            },
+        }
+
+        fact_checking_agent._compile_results(result)
+
+        assert result["status"] == "pass_with_warnings"
+        assert len(result["warnings"]) > 0

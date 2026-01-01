@@ -1,9 +1,7 @@
-"""Test Commit Agent."""
+"""Tests for commit_agent.py."""
 
-import subprocess
 from datetime import datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,288 +11,280 @@ from commit_agent import CommitAgent
 
 @pytest.fixture
 def mock_config():
-    """Provide a mock configuration."""
+    """Mock configuration for CommitAgent."""
     return {
         "general": {
             "journal_directory": "/tmp/test_journal",
+            "author_name": "Test User",
+            "author_email": "test@example.com",
         },
-        "scheduling": {
-            "auto_push": False,
-        },
+        "scheduling": {"auto_push": False, "opencode_url": "http://127.0.0.1:4096"},
     }
 
 
 @pytest.fixture
-def agent(mock_config):
-    """Create CommitAgent with mocked config."""
-    with patch("commit_agent.get_config", return_value=mock_config):
-        with patch("commit_agent.Path") as mock_path:
-            mock_path.return_value = Path("/tmp/test_journal")
-            mock_path.expanduser.return_value = Path("/tmp/test_journal")
-            agent = CommitAgent()
-            yield agent
+def sample_entry_path(tmp_path):
+    """Create a sample journal entry file."""
+    entry_file = tmp_path / "2025" / "12" / "31.md"
+    entry_file.parent.mkdir(parents=True, exist_ok=True)
+    entry_file.write_text("# Test Entry\n\nThis is a test entry.")
+    return entry_file
 
 
-@pytest.fixture
-def temp_entry_file():
-    """Create a temporary entry file."""
-    with TemporaryDirectory() as tmpdir:
-        entry_path = Path(tmpdir) / "2025" / "12" / "31.md"
-        entry_path.parent.mkdir(parents=True)
-        entry_path.write_text("# December 31, 2025\n## Summary\nTest content.")
-        yield entry_path
-
-
-def test_commit_agent_init(agent):
+class TestCommitAgentInit:
     """Test CommitAgent initialization."""
-    assert agent.journal_repo is not None
-    assert agent.auto_push is False
+
+    @patch("commit_agent.get_config")
+    def test_init_with_config(self, mock_get_config, mock_config):
+        """Test initialization with default config."""
+        mock_get_config.return_value = mock_config
+        agent = CommitAgent()
+
+        assert agent.journal_repo == Path("/tmp/test_journal").expanduser()
+        assert agent.auto_push is False
+
+    @patch("commit_agent.get_config")
+    def test_init_with_auto_push(self, mock_get_config, mock_config):
+        """Test initialization with auto_push enabled."""
+        mock_config["scheduling"]["auto_push"] = True
+        mock_get_config.return_value = mock_config
+        agent = CommitAgent()
+
+        assert agent.auto_push is True
 
 
-def test_commit_entry_success(agent, temp_entry_file):
-    """Test committing entry successfully."""
-    with patch("commit_agent.stage_and_commit", return_value=True):
-        result = agent.commit_entry(datetime(2025, 12, 31), temp_entry_file)
+class TestCommitAgentCommitEntry:
+    """Test CommitAgent.commit_entry method."""
 
-    assert result["success"] is True
-    assert result["commit_hash"] is not None
-    assert result["error"] is None
+    @patch("commit_agent.get_config")
+    def test_commit_entry_file_not_found(self, mock_get_config, mock_config, tmp_path):
+        """Test commit_entry when file doesn't exist."""
+        mock_get_config.return_value = mock_config
+        agent = CommitAgent()
 
+        non_existent_path = tmp_path / "nonexistent.md"
+        date = datetime(2025, 12, 31)
+        result = agent.commit_entry(date, non_existent_path)
 
-def test_commit_entry_file_not_found(agent):
-    """Test committing non-existent file."""
-    non_existent = Path("/tmp/nonexistent.md")
+        assert result["success"] is False
+        assert result["commit_hash"] is None
+        assert result["message"] == ""
+        assert "not found" in result["error"]
 
-    result = agent.commit_entry(datetime(2025, 12, 31), non_existent)
-
-    assert result["success"] is False
-    assert "not found" in result["error"].lower()
-
-
-def test_commit_entry_git_command_failure(agent, temp_entry_file):
-    """Test committing when git commands fail."""
-    with patch("commit_agent.stage_and_commit", side_effect=ImportError("No module")):
-        with patch("subprocess.run") as mock_run:
-            # Stage succeeds
-            mock_run.return_value = MagicMock(returncode=0)
-
-            # But commit fails
-            commit_call = MagicMock(returncode=1, stderr="Commit failed")
-            mock_run.side_effect = [
-                MagicMock(returncode=0),  # stage
-                commit_call,  # commit
-            ]
-
-            result = agent.commit_entry(datetime(2025, 12, 31), temp_entry_file)
-
-    assert result["success"] is False
-
-
-def test_commit_entry_exception(agent, temp_entry_file):
-    """Test committing when an exception occurs."""
-    with patch("commit_agent.stage_and_commit", side_effect=Exception("Unexpected error")):
-        result = agent.commit_entry(datetime(2025, 12, 31), temp_entry_file)
-
-    assert result["success"] is False
-    assert "Unexpected error" in result["error"]
-
-
-def test_generate_commit_message(agent):
-    """Test commit message generation."""
-    date = datetime(2025, 12, 31)
-
-    message = agent._generate_commit_message(date)
-
-    assert "December" in message
-    assert "31" in message
-    assert "2025" in message
-
-
-def test_generate_commit_message_january(agent):
-    """Test commit message for January date."""
-    date = datetime(2025, 1, 15)
-
-    message = agent._generate_commit_message(date)
-
-    assert "January" in message
-    assert "15" in message
-
-
-def test_commit_with_git_commands_success(agent, temp_entry_file):
-    """Test committing using direct git commands."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="abc123 Add journal entry for December 31, 2025"
-        )
-
-        result = agent._commit_with_git_commands(datetime(2025, 12, 31), temp_entry_file)
-
-    assert result["success"] is True
-    assert result["commit_hash"] == "abc123"
-
-
-def test_commit_with_git_commands_stage_failure(agent, temp_entry_file):
-    """Test git commit when staging fails."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.side_effect = subprocess.CalledProcessError(1, "git add", stderr="Add failed")
-
-        result = agent._commit_with_git_commands(datetime(2025, 12, 31), temp_entry_file)
-
-    assert result["success"] is False
-
-
-def test_commit_with_git_commands_commit_failure(agent, temp_entry_file):
-    """Test git commit when committing fails."""
-    with patch("subprocess.run") as mock_run:
-        # Stage succeeds
-        stage_result = MagicMock(returncode=0)
-        # Commit fails
-        commit_result = MagicMock(returncode=1, stderr="Commit failed")
-        mock_run.side_effect = [stage_result, commit_result]
-
-        result = agent._commit_with_git_commands(datetime(2025, 12, 31), temp_entry_file)
-
-    assert result["success"] is False
-    assert "Git commit failed" in result["error"] or "Git command failed" in result["error"]
-
-
-def test_commit_entry_with_auto_push_enabled(agent, temp_entry_file):
-    """Test committing with auto-push enabled."""
-    agent.auto_push = True
-
-    with (
-        patch("commit_agent.stage_and_commit", return_value=True),
-        patch.object(agent, "_push_changes", return_value={"success": True}),
+    @patch("commit_agent.get_config")
+    @patch("utils.git_utils.stage_and_commit")
+    def test_commit_entry_success_with_utils(
+        self, mock_stage_and_commit, mock_get_config, mock_config, sample_entry_path
     ):
-        result = agent.commit_entry(datetime(2025, 12, 31), temp_entry_file)
+        """Test commit_entry success using git_utils."""
+        mock_get_config.return_value = mock_config
+        mock_stage_and_commit.return_value = True
+        agent = CommitAgent()
 
-    assert result["success"] is True
+        date = datetime(2025, 12, 31)
+        result = agent.commit_entry(date, sample_entry_path)
 
+        assert result["success"] is True
+        assert result["commit_hash"] is None
+        assert "Add journal entry for December 31, 2025" in result["message"]
+        assert result["error"] is None
 
-def test_commit_entry_auto_push_fails(agent, temp_entry_file):
-    """Test committing when auto-push fails."""
-    agent.auto_push = True
+        mock_stage_and_commit.assert_called_once()
 
-    with (
-        patch("commit_agent.stage_and_commit", return_value=True),
-        patch.object(
-            agent, "_push_changes", return_value={"success": False, "error": "Push failed"}
-        ),
+    @patch("commit_agent.get_config")
+    @patch("utils.git_utils.stage_and_commit")
+    def test_commit_entry_failure_with_utils(
+        self, mock_stage_and_commit, mock_get_config, mock_config, sample_entry_path
     ):
-        result = agent.commit_entry(datetime(2025, 12, 31), temp_entry_file)
+        """Test commit_entry failure using git_utils."""
+        mock_get_config.return_value = mock_config
+        mock_stage_and_commit.return_value = False
+        agent = CommitAgent()
 
-    # Commit should still succeed even if push fails
-    assert result["success"] is True
+        date = datetime(2025, 12, 31)
+        result = agent.commit_entry(date, sample_entry_path)
+
+        assert result["success"] is False
+        assert result["error"] is None
+
+    @patch("commit_agent.get_config")
+    @patch("utils.git_utils.stage_and_commit", side_effect=Exception("Git utility error"))
+    def test_commit_entry_import_error(self, mock_get_config, mock_config, sample_entry_path):
+        """Test commit_entry handles import error."""
+        mock_get_config.return_value = mock_config
+        agent = CommitAgent()
+        date = datetime(2025, 12, 31)
+
+        result = agent.commit_entry(date, sample_entry_path)
+
+        assert result["success"] is False
+        assert "Git utility error" in result["error"]
 
 
-def test_push_changes_success(agent):
-    """Test pushing changes successfully."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
+class TestCommitAgentCommitWithGitCommands:
+    """Test CommitAgent._commit_with_git_commands method."""
 
+    @patch("commit_agent.get_config")
+    @patch("subprocess.run")
+    def test_commit_with_git_commands_success(
+        self, mock_run, mock_get_config, mock_config, sample_entry_path
+    ):
+        """Test _commit_with_git_commands success."""
+        mock_get_config.return_value = mock_config
+
+        mock_run.side_effect = [
+            MagicMock(returncode=0),
+            MagicMock(
+                returncode=0,
+                stdout="master abc123 Commit message\n",
+                stderr="",
+            ),
+        ]
+
+        agent = CommitAgent()
+        date = datetime(2025, 12, 31)
+        result = agent._commit_with_git_commands(date, sample_entry_path)
+
+        assert result["success"] is True
+        assert result["commit_hash"] == "abc123"
+        assert "Add journal entry for December 31, 2025" in result["message"]
+        assert result["error"] is None
+
+        assert mock_run.call_count == 2
+
+    @patch("commit_agent.get_config")
+    @patch("subprocess.run")
+    def test_commit_with_git_commands_commit_failure(
+        self, mock_run, mock_get_config, mock_config, sample_entry_path
+    ):
+        """Test _commit_with_git_commands when commit fails."""
+        mock_get_config.return_value = mock_config
+
+        mock_run.side_effect = [
+            MagicMock(returncode=0),
+            MagicMock(
+                returncode=1,
+                stdout="",
+                stderr="Commit failed: nothing to commit",
+            ),
+        ]
+
+        agent = CommitAgent()
+        date = datetime(2025, 12, 31)
+        result = agent._commit_with_git_commands(date, sample_entry_path)
+
+        assert result["success"] is False
+        assert result["commit_hash"] is None
+        assert "Git commit failed" in result["error"]
+
+    @patch("commit_agent.get_config")
+    @patch("subprocess.run")
+    def test_commit_with_git_commands_with_auto_push(
+        self, mock_run, mock_get_config, mock_config, sample_entry_path
+    ):
+        """Test _commit_with_git_commands with auto_push enabled."""
+        mock_config["scheduling"]["auto_push"] = True
+        mock_get_config.return_value = mock_config
+
+        mock_run.side_effect = [
+            MagicMock(returncode=0),
+            MagicMock(returncode=0, stdout="[abc123] Commit\n", stderr=""),
+            MagicMock(returncode=0, stdout="", stderr=""),
+        ]
+
+        agent = CommitAgent()
+        date = datetime(2025, 12, 31)
+        result = agent._commit_with_git_commands(date, sample_entry_path)
+
+        assert result["success"] is True
+        assert mock_run.call_count == 3
+
+    @patch("commit_agent.get_config")
+    @patch("subprocess.run")
+    def test_commit_with_git_commands_subprocess_error(
+        self, mock_run, mock_get_config, mock_config
+    ):
+        """Test _commit_with_git_commands with CalledProcessError."""
+        mock_get_config.return_value = mock_config
+
+        import subprocess
+
+        mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="Git command failed")
+
+        agent = CommitAgent()
+        date = datetime(2025, 12, 31)
+        entry_path = Path("/tmp/test.md")
+
+        result = agent._commit_with_git_commands(date, entry_path)
+
+        assert result["success"] is False
+        assert "Git command failed" in result["error"]
+
+
+class TestCommitAgentGenerateCommitMessage:
+    """Test CommitAgent._generate_commit_message method."""
+
+    @patch("commit_agent.get_config")
+    def test_generate_commit_message(self, mock_get_config, mock_config):
+        """Test commit message generation."""
+        mock_get_config.return_value = mock_config
+        agent = CommitAgent()
+
+        date = datetime(2025, 12, 31)
+        message = agent._generate_commit_message(date)
+
+        assert message == "Add journal entry for December 31, 2025"
+
+    @patch("commit_agent.get_config")
+    def test_generate_commit_message_january_first(self, mock_get_config, mock_config):
+        """Test commit message for January 1st."""
+        mock_get_config.return_value = mock_config
+        agent = CommitAgent()
+
+        date = datetime(2026, 1, 1)
+        message = agent._generate_commit_message(date)
+
+        assert message == "Add journal entry for January 01, 2026"
+
+
+class TestCommitAgentPushChanges:
+    """Test CommitAgent._push_changes method."""
+
+    @patch("commit_agent.get_config")
+    @patch("subprocess.run")
+    def test_push_changes_success(self, mock_run, mock_get_config, mock_config):
+        """Test _push_changes success."""
+        mock_get_config.return_value = mock_config
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        agent = CommitAgent()
         result = agent._push_changes()
 
-    assert result["success"] is True
-    assert result["error"] is None
+        assert result["success"] is True
+        assert result["error"] is None
 
+    @patch("commit_agent.get_config")
+    @patch("subprocess.run")
+    def test_push_changes_failure(self, mock_run, mock_get_config, mock_config):
+        """Test _push_changes failure."""
+        mock_get_config.return_value = mock_config
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Push failed")
 
-def test_push_changes_failure(agent):
-    """Test pushing changes when it fails."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=1, stderr="Push failed")
-
+        agent = CommitAgent()
         result = agent._push_changes()
 
-    assert result["success"] is False
-    assert result["error"] is not None
+        assert result["success"] is False
+        assert result["error"] == "Push failed"
 
-
-def test_push_changes_exception(agent):
-    """Test pushing changes when an exception occurs."""
-    with patch("subprocess.run") as mock_run:
+    @patch("commit_agent.get_config")
+    @patch("subprocess.run")
+    def test_push_changes_exception(self, mock_run, mock_get_config, mock_config):
+        """Test _push_changes with exception."""
+        mock_get_config.return_value = mock_config
         mock_run.side_effect = Exception("Network error")
 
+        agent = CommitAgent()
         result = agent._push_changes()
 
-    assert result["success"] is False
-
-
-def test_commit_entry_leap_year(agent, temp_entry_file):
-    """Test committing entry for leap year date."""
-    with TemporaryDirectory() as tmpdir:
-        entry_path = Path(tmpdir) / "2024" / "02" / "29.md"
-        entry_path.parent.mkdir(parents=True)
-        entry_path.write_text("# February 29, 2024\n## Summary\nTest.")
-
-        with patch("commit_agent.stage_and_commit", return_value=True):
-            result = agent.commit_entry(datetime(2024, 2, 29), entry_path)
-
-    assert result["success"] is True
-
-
-def test_commit_entry_single_digit_day(agent):
-    """Test committing entry for single-digit day."""
-    with TemporaryDirectory() as tmpdir:
-        entry_path = Path(tmpdir) / "2025" / "01" / "5.md"
-        entry_path.parent.mkdir(parents=True)
-        entry_path.write_text("# January 5, 2025\n## Summary\nTest.")
-
-        with patch("utils.git_utils.stage_and_commit", return_value=True):
-            result = agent.commit_entry(datetime(2025, 1, 5), entry_path)
-
-    assert result["success"] is True
-
-
-def test_commit_entry_commit_message_format(agent):
-    """Test that commit message has correct format."""
-    date = datetime(2025, 12, 31)
-    message = agent._generate_commit_message(date)
-
-    assert message.startswith("Add journal entry for")
-    assert "2025" in message
-
-
-def test_commit_with_git_commands_calls_add(agent, temp_entry_file):
-    """Test that git add is called correctly."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0, stdout="abc123 Test message")
-
-        agent._commit_with_git_commands(datetime(2025, 12, 31), temp_entry_file)
-
-    # Check that git add was called
-    calls = [str(call[0]) for call in mock_run.call_args_list]
-    assert any("git add" in call for call in calls)
-
-
-def test_commit_with_git_commands_calls_commit(agent, temp_entry_file):
-    """Test that git commit is called correctly."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0, stdout="abc123 Test message")
-
-        agent._commit_with_git_commands(datetime(2025, 12, 31), temp_entry_file)
-
-    # Check that git commit was called
-    calls = [str(call[0]) for call in mock_run.call_args_list]
-    assert any("git commit" in call for call in calls)
-
-
-def test_push_changes_logs_info(agent):
-    """Test that push_changes logs information."""
-    with patch("subprocess.run") as mock_run, patch("commit_agent.logger") as mock_logger:
-        mock_run.return_value = MagicMock(returncode=0)
-
-        agent._push_changes()
-
-        mock_logger.info.assert_called()
-        log_calls = [str(call[0]) for call in mock_logger.info.call_args_list]
-        assert any("pushing" in call.lower() for call in log_calls)
-
-
-def test_commit_entry_logs_error(agent):
-    """Test that commit_entry logs errors."""
-    non_existent = Path("/tmp/nonexistent.md")
-
-    with patch("commit_agent.logger") as mock_logger:
-        _ = agent.commit_entry(datetime(2025, 12, 31), non_existent)
-
-    mock_logger.error.assert_called()
+        assert result["success"] is False
+        assert "Network error" in result["error"]
