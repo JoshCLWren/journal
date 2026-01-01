@@ -5,7 +5,7 @@ Complete OpenCode-powered multi-agent system for automated daily journal generat
 ## System Architecture
 
 ```
-Cron (11:59 PM)
+Cron (11:25 AM)
     ↓
 OrchestratorAgent (OpenCode-powered coordinator)
     ↓
@@ -59,7 +59,7 @@ python3 ~/.local/share/journal-automation/main.py status --date YYYY-MM-DD
 bash ~/.local/share/journal-automation/cron-setup.sh
 
 # Or manually add to crontab:
-59 23 * * * /usr/bin/python3 ~/.local/share/journal-automation/main.py run --date $(date +\\%Y-\\%m-\\%d) >> /var/log/journal-automation.log 2>&1
+25 11 * * * /usr/bin/python3 ~/.local/share/journal-automation/main.py run --date $(date +\%Y-\%m-\%d) >> /var/log/journal-automation.log 2>&1
 ```
 
 ## Agents
@@ -144,6 +144,7 @@ Edit `~/.journalrc`:
 - System remembers last processed date
 - On next successful run, catches up on missed days
 - No manual intervention needed
+- Schedule: 11:25 AM daily (early enough to catch missed days from previous day)
 
 **OpenCode Unavailable:**
 - Automatic server startup check
@@ -189,7 +190,7 @@ python3 orchestrator.py 2025-12-31  # Test full workflow
 ## Next Steps
 
 1. ✅ System built and installed
-2. ⏭ Test with December 2025 data
-3. ⏭ Set up cron job
+2. ✅ Tested with December 2025 data
+3. ✅ Set up cron job (11:25 AM daily)
 4. ⏭ Monitor first week of operation
 5. ⏭ Fine-tune prompts based on output quality
