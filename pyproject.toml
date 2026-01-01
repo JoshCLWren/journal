@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "AI-powered journal automation system with agent orchestration"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "requests>=2.31.0",
+]
 
 [project.optional-dependencies]
 dev = [
