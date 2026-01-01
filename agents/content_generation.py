@@ -7,14 +7,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from opencode_client import OpenCodeClient
 from config import get_config
+from opencode_client import OpenCodeClient
 
 
 class ContentGenerationAgent:
     """Generates journal entry content using OpenCode LLM."""
 
     def __init__(self):
+        """Initialize ContentGenerationAgent with config and OpenCode client."""
         self.config = get_config()
         self.client = OpenCodeClient(base_url=self.config["scheduling"]["opencode_url"])
 
@@ -41,9 +42,7 @@ class ContentGenerationAgent:
             result["summary"] = self._generate_summary(git_data)
 
             # Generate repositories section
-            result["repositories_section"] = self._generate_repositories_section(
-                git_data
-            )
+            result["repositories_section"] = self._generate_repositories_section(git_data)
 
             # Generate project sections
             result["project_sections"] = self._generate_project_sections(git_data)
@@ -272,14 +271,12 @@ If no updates needed, return existing cache as-is."""
         sections.append(result["repositories_section"])
 
         # Add project sections
-        for repo_name, section in result["project_sections"].items():
+        for _repo_name, section in result["project_sections"].items():
             sections.append(section)
             sections.append("")
 
         # Add activity summary (needs project sections as context)
-        activity_summary = self._generate_activity_summary(
-            git_data, result["project_sections"]
-        )
+        activity_summary = self._generate_activity_summary(git_data, result["project_sections"])
         if activity_summary:
             sections.append(activity_summary)
             sections.append("")

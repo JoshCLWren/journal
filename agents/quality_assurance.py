@@ -9,15 +9,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from opencode_client import OpenCodeClient
 from config import get_config
-from utils.markdown_utils import validate_markdown_syntax, extract_commits_from_markdown
+from opencode_client import OpenCodeClient
+from utils.markdown_utils import validate_markdown_syntax
 
 
 class QualityAssuranceAgent:
     """Validates journal entry quality and handles file creation and git operations."""
 
     def __init__(self):
+        """Initialize QualityAssuranceAgent with config and OpenCode client."""
         self.config = get_config()
         self.client = OpenCodeClient(base_url=self.config["scheduling"]["opencode_url"])
 
@@ -59,15 +60,11 @@ class QualityAssuranceAgent:
 
             # Determine pass/fail based on quality threshold
             min_score = 70
-            critical_issues = any(
-                "critical" in issue.lower() for issue in result["issues"]
-            )
+            critical_issues = any("critical" in issue.lower() for issue in result["issues"])
 
             if result["overall_score"] >= min_score and not critical_issues:
                 result["status"] = "pass"
-                print(
-                    f"  ✓ Quality check passed (Score: {result['overall_score']}/100)"
-                )
+                print(f"  ✓ Quality check passed (Score: {result['overall_score']}/100)")
 
                 # Step 5: Create file
                 print("  → Creating journal entry file...")
@@ -86,9 +83,7 @@ class QualityAssuranceAgent:
 
             else:
                 result["status"] = "fail"
-                print(
-                    f"  ✗ Quality check failed (Score: {result['overall_score']}/100)"
-                )
+                print(f"  ✗ Quality check failed (Score: {result['overall_score']}/100)")
                 if result["issues"]:
                     print(f"  Issues: {', '.join(result['issues'][:3])}")
 
@@ -210,7 +205,7 @@ If score < 70, include critical issues in reasoning."""
             month = dt.strftime("%m")
             day = dt.strftime("%d")
         except ValueError:
-            raise ValueError(f"Invalid date format: {date}")
+            raise ValueError(f"Invalid date format: {date}") from None
 
         # Create directory structure YYYY/MM/
         target_dir = journal_dir / year / month

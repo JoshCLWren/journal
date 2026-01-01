@@ -5,22 +5,22 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Set, Optional, Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from opencode_client import OpenCodeClient
 from config import get_config
+from opencode_client import OpenCodeClient
 
 
 class FactCheckingAgent:
     """Validates journal entries against git data using OpenCode LLM."""
 
     def __init__(self):
+        """Initialize FactCheckingAgent with config and OpenCode client."""
         self.config = get_config()
         self.client = OpenCodeClient(base_url=self.config["scheduling"]["opencode_url"])
 
-    def check_entry(self, git_data: Dict, markdown_content: str) -> Dict:
+    def check_entry(self, git_data: dict, markdown_content: str) -> dict:
         """Perform comprehensive fact-checking on generated journal entry."""
         print(f"\n🔍 Fact Checking Agent: Validating {git_data['date']}")
 
@@ -34,19 +34,11 @@ class FactCheckingAgent:
         }
 
         try:
-            result["checks"]["accuracy"] = self._check_accuracy(
-                git_data, markdown_content
-            )
-            result["checks"]["completeness"] = self._check_completeness(
-                git_data, markdown_content
-            )
-            result["checks"]["consistency"] = self._check_consistency(
-                git_data, markdown_content
-            )
+            result["checks"]["accuracy"] = self._check_accuracy(git_data, markdown_content)
+            result["checks"]["completeness"] = self._check_completeness(git_data, markdown_content)
+            result["checks"]["consistency"] = self._check_consistency(git_data, markdown_content)
             result["checks"]["duplicates"] = self._check_duplicates(markdown_content)
-            result["checks"]["anomalies"] = self._check_anomalies(
-                git_data, markdown_content
-            )
+            result["checks"]["anomalies"] = self._check_anomalies(git_data, markdown_content)
 
             result["reasoning"] = self._generate_llm_analysis(
                 git_data, markdown_content, result["checks"]
@@ -69,7 +61,7 @@ class FactCheckingAgent:
 
         return result
 
-    def _check_accuracy(self, git_data: Dict, markdown_content: str) -> Dict:
+    def _check_accuracy(self, git_data: dict, markdown_content: str) -> dict:
         """Check accuracy of commit counts and data."""
         check_result = {"passed": True, "issues": [], "corrections": []}
 
@@ -113,13 +105,11 @@ class FactCheckingAgent:
                 check_result["issues"].append(
                     f"Total commits mismatch (expected {expected_total}, found {actual_total})"
                 )
-                check_result["corrections"].append(
-                    f"Update total commit count to {expected_total}"
-                )
+                check_result["corrections"].append(f"Update total commit count to {expected_total}")
 
         return check_result
 
-    def _check_completeness(self, git_data: Dict, markdown_content: str) -> Dict:
+    def _check_completeness(self, git_data: dict, markdown_content: str) -> dict:
         """Check completeness - all repos with commits are included."""
         check_result = {"passed": True, "issues": [], "corrections": []}
 
@@ -130,16 +120,14 @@ class FactCheckingAgent:
                 repo_pattern = rf"##\s*{re.escape(repo_name)}"
                 if not re.search(repo_pattern, markdown_content):
                     check_result["passed"] = False
-                    check_result["issues"].append(
-                        f"Repo {repo_name}: Missing section header"
-                    )
+                    check_result["issues"].append(f"Repo {repo_name}: Missing section header")
                     check_result["corrections"].append(
                         f"Add section for {repo_name} with {repo_data['commits']} commits"
                     )
 
         return check_result
 
-    def _check_consistency(self, git_data: Dict, markdown_content: str) -> Dict:
+    def _check_consistency(self, git_data: dict, markdown_content: str) -> dict:
         """Check consistency of LOC, timestamps, and data."""
         check_result = {"passed": True, "issues": [], "corrections": []}
 
@@ -168,7 +156,7 @@ class FactCheckingAgent:
 
         return check_result
 
-    def _check_duplicates(self, markdown_content: str) -> Dict:
+    def _check_duplicates(self, markdown_content: str) -> dict:
         """Check for duplicate sections, entries, or commits."""
         check_result = {"passed": True, "issues": [], "corrections": []}
 
@@ -182,9 +170,7 @@ class FactCheckingAgent:
                 if header in section_headers:
                     check_result["passed"] = False
                     check_result["issues"].append(f"Duplicate section header: {header}")
-                    check_result["corrections"].append(
-                        f"Remove duplicate section: {header}"
-                    )
+                    check_result["corrections"].append(f"Remove duplicate section: {header}")
                 section_headers.append(header)
 
             commit_match = re.match(
@@ -202,7 +188,7 @@ class FactCheckingAgent:
 
         return check_result
 
-    def _check_anomalies(self, git_data: Dict, markdown_content: str) -> Dict:
+    def _check_anomalies(self, git_data: dict, markdown_content: str) -> dict:
         """Check for anomalies in data or formatting."""
         check_result = {"passed": True, "issues": [], "corrections": []}
 
@@ -235,9 +221,7 @@ class FactCheckingAgent:
 
         return check_result
 
-    def _generate_llm_analysis(
-        self, git_data: Dict, markdown_content: str, checks: Dict
-    ) -> str:
+    def _generate_llm_analysis(self, git_data: dict, markdown_content: str, checks: dict) -> str:
         """Use OpenCode LLM to provide intelligent analysis and reasoning."""
         prompt = f"""You are a fact-checking expert analyzing a journal entry for development work.
 
@@ -283,7 +267,7 @@ Respond ONLY with the analysis paragraph, no additional commentary or formatting
         except Exception as e:
             return f"LLM analysis failed: {str(e)}"
 
-    def _compile_results(self, result: Dict) -> None:
+    def _compile_results(self, result: dict) -> None:
         """Compile all check results into final output."""
         checks = result.get("checks", {})
 
@@ -302,9 +286,7 @@ Respond ONLY with the analysis paragraph, no additional commentary or formatting
 
         if result["errors"]:
             result["status"] = "fail"
-        elif result["warnings"] or any(
-            not c.get("passed", True) for c in checks.values()
-        ):
+        elif result["warnings"] or any(not c.get("passed", True) for c in checks.values()):
             result["status"] = "pass_with_warnings"
         else:
             result["status"] = "pass"

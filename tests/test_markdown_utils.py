@@ -1,0 +1,171 @@
+"""Tests for utils/markdown_utils.py."""
+
+from utils.markdown_utils import (
+    extract_commits_from_markdown,
+    format_date,
+    format_header,
+    has_section,
+    is_valid_filename,
+    validate_markdown_syntax,
+)
+
+
+class TestValidateMarkdownSyntax:
+    """Tests for validate_markdown_syntax()."""
+
+    def test_valid_markdown_no_errors(self):
+        """Test valid markdown returns no errors."""
+        content = "# Header\n\nSome text with `code` inline.\n\n```\ncode block\n```"
+        errors = validate_markdown_syntax(content)
+        assert errors == []
+
+    def test_unclosed_code_block(self):
+        """Test detection of unclosed code block."""
+        content = "# Header\n\n```\nunclosed code"
+        errors = validate_markdown_syntax(content)
+        assert "Unclosed code block detected" in errors
+
+    def test_unclosed_inline_code(self):
+        """Test detection of unclosed inline code."""
+        content = "# Header\n\nText with `unclosed inline code"
+        errors = validate_markdown_syntax(content)
+        assert "Unclosed inline code detected" in errors
+
+    def test_multiple_errors(self):
+        """Test detection of multiple errors."""
+        content = "# Header\n\n```\nunclosed\n\nText with ``inline error"
+        errors = validate_markdown_syntax(content)
+        assert len(errors) == 2
+
+
+class TestExtractCommitsFromMarkdown:
+    """Tests for extract_commits_from_markdown()."""
+
+    def test_extracts_commit_count(self):
+        """Test extracting commit count for a repo."""
+        content = "## project-name (5 commits)\nSome content"
+        result = extract_commits_from_markdown(content, "project-name")
+        assert result == 5
+
+    def test_case_insensitive_repo_name(self):
+        """Test that repo name matching is case insensitive."""
+        content = "## Project-Name (10 commits)\nSome content"
+        result = extract_commits_from_markdown(content, "project-name")
+        assert result == 10
+
+    def test_no_commits_returns_zero(self):
+        """Test that missing commit count returns zero."""
+        content = "## project-name\nSome content"
+        result = extract_commits_from_markdown(content, "project-name")
+        assert result == 0
+
+    def test_multiple_repos_finds_correct_one(self):
+        """Test finding correct repo in content with multiple repos."""
+        content = """## other-repo (3 commits)
+Some content
+
+## target-repo (7 commits)
+More content"""
+        result = extract_commits_from_markdown(content, "target-repo")
+        assert result == 7
+
+
+class TestHasSection:
+    """Tests for has_section()."""
+
+    def test_existing_section(self):
+        """Test detection of existing section."""
+        content = "# Header\n\n## Summary\n\nSome content"
+        result = has_section(content, "Summary")
+        assert result is True
+
+    def test_missing_section(self):
+        """Test detection of missing section."""
+        content = "# Header\n\n## Introduction\n\nSome content"
+        result = has_section(content, "Summary")
+        assert result is False
+
+    def test_section_with_trailing_spaces(self):
+        """Test that section matching ignores trailing spaces."""
+        content = "# Header\n\n## Summary   \n\nSome content"
+        result = has_section(content, "Summary")
+        assert result is True
+
+    def test_exact_match_required(self):
+        """Test that section name must match exactly."""
+        content = "# Header\n\n## Summary Details\n\nSome content"
+        result = has_section(content, "Summary")
+        assert result is False
+
+
+class TestIsValidFilename:
+    """Tests for is_valid_filename()."""
+
+    def test_valid_filename(self):
+        """Test valid filename format."""
+        assert is_valid_filename("2025/12/31.md") is True
+        assert is_valid_filename("2024/01/01.md") is True
+        assert is_valid_filename("2026/06/15.md") is True
+
+    def test_invalid_filename_format(self):
+        """Test invalid filename formats."""
+        assert is_valid_filename("25/12/31.md") is False
+        assert is_valid_filename("2025-12-31.md") is False
+        assert is_valid_filename("2025/12/31.txt") is False
+        assert is_valid_filename("2025/12.md") is False
+        assert is_valid_filename("2025/12/31/extra.md") is False
+
+    def test_incomplete_dates(self):
+        """Test incomplete date formats."""
+        assert is_valid_filename("2025/1/1.md") is False
+        assert is_valid_filename("2025/12/31") is False
+        assert is_valid_filename("2025/12/31.txt") is False
+
+
+class TestFormatHeader:
+    """Tests for format_header()."""
+
+    def test_format_header_with_hours(self):
+        """Test header formatting with hours."""
+        result = format_header("2025-12-31", 4.5, 1500)
+        assert "# December 31, 2025" in result
+        assert "~1,500 lines" in result
+        assert "4.5 hours" in result
+        assert "Auto-generated by journal automation" in result
+
+    def test_format_header_with_minutes(self):
+        """Test header formatting with minutes (< 1 hour)."""
+        result = format_header("2025-12-31", 0.5, 500)
+        assert "# December 31, 2025" in result
+        assert "~500 lines" in result
+        assert "30 minutes" in result
+
+    def test_format_header_large_loc(self):
+        """Test header formatting with large LOC count."""
+        result = format_header("2025-12-31", 8, 10000)
+        assert "~10,000 lines" in result
+
+    def test_format_header_small_loc(self):
+        """Test header formatting with small LOC count."""
+        result = format_header("2025-12-31", 2, 100)
+        assert "~100 lines" in result
+
+
+class TestFormatDate:
+    """Tests for format_date()."""
+
+    def test_format_date_valid(self):
+        """Test formatting valid date string."""
+        assert format_date("2025-12-31") == "December 31, 2025"
+        assert format_date("2024-01-15") == "January 15, 2024"
+        assert format_date("2026-06-01") == "June 01, 2026"
+
+    def test_format_date_invalid(self):
+        """Test that invalid date returns original string."""
+        assert format_date("invalid-date") == "invalid-date"
+        assert format_date("2025/12/31") == "2025/12/31"
+        assert format_date("not-a-date") == "not-a-date"
+
+    def test_format_date_leap_year(self):
+        """Test formatting leap year date."""
+        assert format_date("2024-02-29") == "February 29, 2024"

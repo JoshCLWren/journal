@@ -2,8 +2,8 @@
 
 import logging
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 def setup_logging(log_dir: Path, level: int = logging.INFO):

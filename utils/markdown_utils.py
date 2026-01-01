@@ -2,11 +2,9 @@
 """Markdown utility functions for journal automation."""
 
 import re
-from typing import List, Optional
-from pathlib import Path
 
 
-def validate_markdown_syntax(content: str) -> List[str]:
+def validate_markdown_syntax(content: str) -> list[str]:
     """Basic Markdown syntax validation."""
     errors = []
 
@@ -20,9 +18,8 @@ def validate_markdown_syntax(content: str) -> List[str]:
     if inline_code % 2 != 0:
         errors.append("Unclosed inline code detected")
 
-    # Check for unmatched headers
-    header_levels = re.findall(r"^(#{1,6})\s", content, re.MULTILINE)
-    # This is basic - a full parser would be better
+    # Check for unmatched headers (basic check - a full parser would be better)
+    re.findall(r"^(#{1,6})\s", content, re.MULTILINE)
 
     return errors
 

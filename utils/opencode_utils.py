@@ -2,7 +2,6 @@
 """OpenCode utility functions for journal automation."""
 
 import subprocess
-import sys
 from pathlib import Path
 
 OPENCODE_DEFAULT_URL = "http://127.0.0.1:4096"
@@ -49,7 +48,7 @@ def start_opencode_server() -> bool:
         # Wait for it to start
         import time
 
-        for i in range(10):
+        for _i in range(10):
             if is_opencode_running():
                 print("✓ OpenCode server started")
                 return True
