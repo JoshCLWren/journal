@@ -2,35 +2,33 @@
 """Git Analysis Agent - Extracts commit data from repositories."""
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
-import sys
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config import get_config
 from utils.git_utils import (
-    get_commits_by_date,
     calculate_loc_changes,
     categorize_commit,
-    extract_task_id,
-    get_repo_description,
+    get_commits_by_date,
     is_work_day,
 )
-from config import get_config
 
 
 class GitAnalysisAgent:
     """Analyzes git repositories to extract daily commit data."""
 
     def __init__(self):
+        """Initialize GitAnalysisAgent with config and repository paths."""
         self.config = get_config()
         self.code_dir = Path(self.config["general"]["code_directory"])
         self.journal_dir = Path(self.config["general"]["journal_directory"])
         self.author_name = self.config["general"]["author_name"]
 
-    def analyze_day(self, date: str) -> Dict:
+    def analyze_day(self, date: str) -> dict:
         """Analyze all repositories for a specific date."""
         print(f"\n📊 Git Analysis Agent: Analyzing {date}")
 
@@ -62,9 +60,7 @@ class GitAnalysisAgent:
             if not commits:
                 continue
 
-            loc_added, loc_deleted = calculate_loc_changes(
-                repo_path, date, self.author_name
-            )
+            loc_added, loc_deleted = calculate_loc_changes(repo_path, date, self.author_name)
 
             commits_by_category = self._categorize_commits(commits)
             top_features = self._extract_top_features(commits)
@@ -92,9 +88,7 @@ class GitAnalysisAgent:
         if results["is_work_day"]:
             results["estimated_hours"] = self._estimate_hours(repo_results)
 
-        print(
-            f"  ✓ Found {results['total_commits']} commits across {len(repo_results)} repos"
-        )
+        print(f"  ✓ Found {results['total_commits']} commits across {len(repo_results)} repos")
         print(
             f"  ✓ ~{results['total_loc_added']:,} lines added, ~{results['total_loc_deleted']:,} deleted"
         )
@@ -102,15 +96,13 @@ class GitAnalysisAgent:
 
         return results
 
-    def _get_all_repos(self) -> List[str]:
+    def _get_all_repos(self) -> list[str]:
         """Get list of all repositories to scan."""
         exclude_repos = self.config["git"]["exclude_repos"]
         exclude_patterns = self.config["git"]["exclude_patterns"]
 
         all_dirs = [
-            d.name
-            for d in self.code_dir.iterdir()
-            if d.is_dir() and not d.name.startswith(".")
+            d.name for d in self.code_dir.iterdir() if d.is_dir() and not d.name.startswith(".")
         ]
 
         filtered_dirs = []
@@ -141,7 +133,7 @@ class GitAnalysisAgent:
 
         return True
 
-    def _categorize_commits(self, commits: List[Dict]) -> Dict[str, int]:
+    def _categorize_commits(self, commits: list[dict]) -> dict[str, int]:
         """Categorize commits by type."""
         categories = {}
 
@@ -151,16 +143,14 @@ class GitAnalysisAgent:
 
         return categories
 
-    def _extract_top_features(self, commits: List[Dict]) -> List[str]:
+    def _extract_top_features(self, commits: list[dict]) -> list[str]:
         """Extract top features from commit messages."""
         messages = [c["message"] for c in commits]
 
         # Filter out minor commits
         minor_prefixes = ["chore:", "style:", "fix:", "merge:"]
         significant_messages = [
-            m
-            for m in messages
-            if not any(m.lower().startswith(p) for p in minor_prefixes)
+            m for m in messages if not any(m.lower().startswith(p) for p in minor_prefixes)
         ]
 
         # Extract unique features (first 60 chars)
@@ -168,7 +158,6 @@ class GitAnalysisAgent:
         seen = set()
 
         for msg in significant_messages[:10]:  # Top 10 significant commits
-            feature = msg[:60] + "..." if len(msg) > 60 else msg
             feature_key = msg[:30]  # De-dupe by first 30 chars
 
             if feature_key not in seen:
@@ -177,7 +166,7 @@ class GitAnalysisAgent:
 
         return features[:5]  # Return top 5
 
-    def _estimate_hours(self, repo_results: Dict[str, Dict]) -> float:
+    def _estimate_hours(self, repo_results: dict[str, dict]) -> float:
         """Estimate hours worked based on commit timestamps."""
         all_timestamps = []
 
@@ -203,11 +192,7 @@ class GitAnalysisAgent:
             commits_per_hour = total_commits / span_hours
             # If commits/hour is very high (>20), they're probably working faster
             # If commits/hour is very low (<5), they're probably doing other work
-            adjustment = (
-                max(0.5, min(2.0, 10 / commits_per_hour))
-                if commits_per_hour > 0
-                else 1.0
-            )
+            adjustment = max(0.5, min(2.0, 10 / commits_per_hour)) if commits_per_hour > 0 else 1.0
             return span_hours * adjustment
 
         return span_hours

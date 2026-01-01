@@ -1,20 +1,41 @@
 #!/usr/bin/env python3
-import requests
+"""OpenCode client for interacting with OpenCode LLM server."""
+
 import json
-from typing import Optional, Iterator, Dict, Any
+from collections.abc import Iterator
+from typing import Any
+
+import requests
 
 
 class OpenCodeClient:
-    def __init__(self, base_url: str = "http://127.0.0.1:4096"):
-        self.base_url = base_url
-        self.session_id: Optional[str] = None
+    """Client for interacting with OpenCode LLM server."""
 
-    def health(self) -> Dict[str, Any]:
+    def __init__(self, base_url: str = "http://127.0.0.1:4096"):
+        """Initialize OpenCode client with base URL.
+
+        Args:
+            base_url: URL of the OpenCode server
+        """
+        self.base_url = base_url
+        self.session_id: str | None = None
+
+    def health(self) -> dict[str, Any]:
+        """Check if OpenCode server is healthy.
+
+        Returns:
+            Server health status information
+        """
         r = requests.get(f"{self.base_url}/global/health")
         r.raise_for_status()
         return r.json()
 
-    def create_session(self) -> Optional[str]:
+    def create_session(self) -> str | None:
+        """Create a new session with the OpenCode server.
+
+        Returns:
+            Session ID if successful, None otherwise
+        """
         r = requests.post(f"{self.base_url}/session", json={})
         r.raise_for_status()
         self.session_id = r.json()["id"]
@@ -22,7 +43,17 @@ class OpenCodeClient:
 
     def chat(
         self, message: str, model: str = "glm-4.7-free", provider: str = "opencode"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
+        """Send a message to the OpenCode LLM.
+
+        Args:
+            message: Message to send
+            model: Model ID to use
+            provider: Provider ID to use
+
+        Returns:
+            Dictionary with 'content' and 'data' keys
+        """
         if not self.session_id:
             self.create_session()
 
@@ -55,6 +86,16 @@ class OpenCodeClient:
     def chat_stream(
         self, message: str, model: str = "glm-4.7-free", provider: str = "opencode"
     ) -> Iterator[str]:
+        """Send a message and stream the response.
+
+        Args:
+            message: Message to send
+            model: Model ID to use
+            provider: Provider ID to use
+
+        Yields:
+            Text chunks as they arrive
+        """
         if not self.session_id:
             self.create_session()
 
@@ -80,6 +121,7 @@ class OpenCodeClient:
 
 
 def main():
+    """Test OpenCode client functionality."""
     client = OpenCodeClient()
 
     print("Checking health...")

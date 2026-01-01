@@ -5,11 +5,9 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +16,10 @@ class ValidationAgent:
     """Validates journal entries for structure and content."""
 
     def __init__(self):
+        """Initialize ValidationAgent."""
         pass
 
-    def validate_entry(self, entry_path: Path) -> Dict:
+    def validate_entry(self, entry_path: Path) -> dict:
         """Validate a journal entry.
 
         Args:
@@ -37,7 +36,7 @@ class ValidationAgent:
         warnings = []
 
         try:
-            with open(entry_path, "r", encoding="utf-8") as f:
+            with open(entry_path, encoding="utf-8") as f:
                 content = f.read()
 
             # Check required sections
@@ -89,9 +88,7 @@ class ValidationAgent:
         """
         return section_title in content
 
-    def _check_markdown_formatting(
-        self, content: str, issues: List[str], warnings: List[str]
-    ):
+    def _check_markdown_formatting(self, content: str, issues: list[str], warnings: list[str]):
         """Check markdown formatting issues.
 
         Args:
@@ -110,9 +107,7 @@ class ValidationAgent:
             if line.startswith("##") and not lines[i - 2].strip() == "":
                 warnings.append(f"Line {i}: Header should have empty line before it")
 
-    def _check_date_consistency(
-        self, entry_path: Path, content: str, issues: List[str]
-    ):
+    def _check_date_consistency(self, entry_path: Path, content: str, issues: list[str]):
         """Check if date in filename matches date in header.
 
         Args:

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Git utility functions for journal automation."""
 
-import subprocess
 import re
-from datetime import datetime
+import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 
 def run_git_command(repo_path: Path, *args: str) -> str:
@@ -19,7 +17,7 @@ def get_commits_by_date(
     repo_path: Path,
     date: str,
     author_name: str,
-) -> List[Dict]:
+) -> list[dict]:
     """Get all commits for a specific date by author."""
     start = f"{date} 00:00:00"
     end = f"{date} 23:59:59"
@@ -51,7 +49,7 @@ def get_commits_by_date(
 
 def calculate_loc_changes(
     repo_path: Path, date: str, author_name: str
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Calculate lines added and deleted for a date."""
     start = f"{date} 00:00:00"
     end = f"{date} 23:59:59"
@@ -91,19 +89,19 @@ def categorize_commit(message: str) -> str:
     return "other"
 
 
-def extract_task_id(message: str) -> Optional[str]:
+def extract_task_id(message: str) -> str | None:
     """Extract TASK-ID from commit message."""
     task_match = re.search(r"TASK[-_]?\d+", message)
     return task_match.group(0) if task_match else None
 
 
-def get_repo_description(repo_path: Path) -> Optional[str]:
+def get_repo_description(repo_path: Path) -> str | None:
     """Extract description from repo README."""
     for readme_name in ["README.md", "readme.md", "README.rst"]:
         readme_path = repo_path / readme_name
         if readme_path.exists():
             try:
-                with open(readme_path, "r", encoding="utf-8") as f:
+                with open(readme_path, encoding="utf-8") as f:
                     content = f.read()
                     # Extract first paragraph or sentence
                     first_line = content.split("\n")[0]

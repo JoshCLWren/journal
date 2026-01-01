@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Utils package initialization."""
 
-from .git_utils import *
-from .markdown_utils import *
-from .opencode_utils import *
-from .cache import *
+from .cache import *  # noqa: F403
+from .git_utils import *  # noqa: F403
+from .markdown_utils import *  # noqa: F403
+from .opencode_utils import *  # noqa: F403

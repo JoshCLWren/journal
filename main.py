@@ -7,10 +7,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-
 from config import get_config
-from utils.opencode_utils import ensure_opencode_running
 from utils.logging_utils import setup_logging
+from utils.opencode_utils import ensure_opencode_running
 
 
 def main():
@@ -22,9 +21,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # generate command
-    generate_parser = subparsers.add_parser(
-        "generate", help="Run full automation for a date"
-    )
+    generate_parser = subparsers.add_parser("generate", help="Run full automation for a date")
     generate_parser.add_argument(
         "--date", type=str, help="Date in YYYY-MM-DD format (default: today)"
     )
@@ -37,14 +34,10 @@ def main():
 
     # run command
     run_parser = subparsers.add_parser("run", help="Run orchestrator (for cron)")
-    run_parser.add_argument(
-        "--date", type=str, help="Date in YYYY-MM-DD format (default: today)"
-    )
+    run_parser.add_argument("--date", type=str, help="Date in YYYY-MM-DD format (default: today)")
 
     # status command
-    status_parser = subparsers.add_parser(
-        "status", help="Check if entry exists and its status"
-    )
+    status_parser = subparsers.add_parser("status", help="Check if entry exists and its status")
     status_parser.add_argument(
         "--date", type=str, help="Date in YYYY-MM-DD format (default: today)"
     )
@@ -66,9 +59,7 @@ def main():
         logger.info("Checking OpenCode server status")
         opencode_available = ensure_opencode_running()
         if not opencode_available:
-            logger.warning(
-                "OpenCode server not available. Some features may be limited."
-            )
+            logger.warning("OpenCode server not available. Some features may be limited.")
         else:
             logger.info("OpenCode server is running")
 
@@ -141,7 +132,7 @@ def cmd_validate(args, logger):
     if result["valid"]:
         logger.info("✓ Entry is valid")
     else:
-        logger.warning(f"✗ Entry has issues:")
+        logger.warning("✗ Entry has issues:")
         for issue in result["issues"]:
             logger.warning(f"  - {issue}")
         sys.exit(1)
@@ -221,7 +212,7 @@ def parse_date(date_str: str) -> datetime:
     try:
         return datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(f"Invalid date format: {date_str}. Use YYYY-MM-DD.")
+        raise ValueError(f"Invalid date format: {date_str}. Use YYYY-MM-DD.") from None
 
 
 if __name__ == "__main__":

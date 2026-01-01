@@ -5,12 +5,11 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agents.git_analysis import GitAnalysisAgent
 from agents.content_generation import ContentGenerationAgent
+from agents.git_analysis import GitAnalysisAgent
 from commit_agent import CommitAgent
 from config import get_config
 
@@ -21,13 +20,14 @@ class OrchestratorAgent:
     """Orchestrates the journal entry generation workflow."""
 
     def __init__(self):
+        """Initialize OrchestratorAgent with sub-agents and config."""
         self.git_agent = GitAnalysisAgent()
         self.content_agent = ContentGenerationAgent()
         self.commit_agent = CommitAgent()
         config = get_config()
         self.journal_dir = Path(config["general"]["journal_directory"]).expanduser()
 
-    def run_day(self, date: datetime) -> Dict:
+    def run_day(self, date: datetime) -> dict:
         """Run full workflow for a specific day.
 
         Args:
