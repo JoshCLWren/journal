@@ -1,6 +1,8 @@
 # Coding Journal
 
-This journal tracks daily coding activity, projects, and development progress across all repositories in `~/code` and `~/vpn-torrent`.
+[![CI Status](https://github.com/your-username/journal/workflows/CI/badge.svg)](https://github.com/your-username/journal/actions)
+
+This journal tracks daily coding activity, projects, and development progress across all repositories in `~/code` and `~/vpn-torrent`. It features an AI-powered automation system for generating, validating, and committing journal entries.
 
 ## Purpose
 
@@ -116,11 +118,108 @@ Entries follow conventional commit prefixes:
 
 ## Automation
 
-Future enhancements:
-- Script to auto-generate daily entries from git logs
-- Automatic commit tracking and statistics
-- Monthly summary generation
-- Skill extraction and categorization
+The journal includes an AI-powered automation system with:
+
+- **Multi-agent orchestration** for intelligent journal entry generation
+- **Git analysis** to extract commit data across multiple repositories
+- **Content generation** using AI models (via OpenCode API)
+- **Fact checking** and quality assurance
+- **Automatic validation** and commit workflow
+
+See [AGENTS.md](AGENTS.md) for detailed documentation of the agent architecture.
+
+## Quick Start
+
+### Setting Up the Automation System
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/journal.git
+cd journal
+
+# Create virtual environment
+make venv
+
+# Install dependencies
+make sync
+
+# Install pre-commit hook
+make install-githook
+
+# Run automation for today
+python main.py generate
+
+# Or for a specific date
+python main.py generate --date 2025-12-31
+```
+
+### Development Workflow
+
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run linting
+make lint
+
+# Run tests
+make pytest
+
+# Run the application
+python main.py --help
+```
+
+## Project Structure
+
+```
+journal/
+├── README.md                    # This file
+├── AGENTS.md                    # Agent architecture documentation
+├── CONTRIBUTING.md              # Contribution guidelines
+├── main.py                      # CLI entry point
+├── config.py                    # Configuration management
+├── orchestrator.py              # Main orchestration logic
+├── opencode_client.py           # OpenCode API client
+├── agents/                      # Agent implementations
+│   ├── git_analysis.py
+│   ├── content_generation.py
+│   ├── fact_checking.py
+│   ├── quality_assurance.py
+│   ├── validator.py
+│   └── orchestrator.py
+├── utils/                       # Utility modules
+│   ├── cache.py
+│   ├── git_utils.py
+│   ├── logging_utils.py
+│   ├── markdown_utils.py
+│   └── opencode_utils.py
+├── prompts/                     # AI prompt templates
+├── scripts/                     # Utility scripts
+│   └── lint.sh
+├── tests/                       # Test suite
+│   ├── conftest.py
+│   └── test_config.py
+├── .github/                     # CI/CD configuration
+│   └── workflows/ci.yml
+├── 2025/                        # Journal entries
+│   ├── 12.md
+│   ├── 12-feedback.md
+│   └── 12/
+└── 2026/                        # Future entries
+```
+
+## Configuration
+
+Configuration is stored in `~/.journalrc`. The first time you run the application, it will create a default configuration file.
+
+Key settings:
+- `code_directory`: Base directory for code repositories (default: `~/code`)
+- `journal_directory`: Directory for journal entries (default: `~/code/journal`)
+- `git.exclude_repos`: Repositories to exclude from analysis
+- `opencode.model`: AI model to use for content generation
+- `quality.require_human_approval`: Whether to require manual approval before committing
+
+See `config.py` for full configuration options.
 
 ## December 2025 Highlights
 
@@ -154,3 +253,57 @@ For a new daily entry:
 7. Add projects legend for new projects
 8. Update monthly index with link to new entry
 9. Update this README with link to new day
+
+## Code Quality
+
+This project follows strict code quality standards:
+
+- **Python 3.13** with type hints throughout
+- **ruff** for linting and formatting (line length: 100)
+- **pyright** for static type checking
+- **Pre-commit hooks** that enforce code quality standards
+- **pytest** for testing with coverage reporting
+
+### Linting
+
+```bash
+# Run all linting checks
+make lint
+
+# Format code with ruff
+ruff format .
+```
+
+### Type Checking
+
+```bash
+# Run type checker
+pyright .
+```
+
+### Testing
+
+```bash
+# Run all tests
+make pytest
+
+# Run with coverage
+pytest --cov=. --cov-report=html
+```
+
+## CI/CD
+
+GitHub Actions runs on every push to main and on pull requests:
+
+- **Lint job**: Runs ruff and pyright
+- **Tests job**: Runs pytest with coverage
+
+View pipeline status in the Actions tab of the repository.
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+MIT License - see LICENSE file for details
