@@ -107,9 +107,10 @@ Respond ONLY with the summary text, no additional commentary."""
         lines = ["## Repositories Worked On", ""]
 
         for repo_name, repo_data in git_data["repos"].items():
-            lines.append(f"- `~/code/{repo_name}` ({repo_data['commits']} commits)")
+            if repo_data["commits"] > 0:
+                lines.append(f"- `~/code/{repo_name}` ({repo_data['commits']} commits)")
 
-        total = sum(r["commits"] for r in git_data["repos"].values())
+        total = sum(r["commits"] for r in git_data["repos"].values() if r["commits"] > 0)
         lines.append("")
         lines.append(f"- **Total: {total} commits**")
         lines.append("")
@@ -204,8 +205,12 @@ Respond ONLY with the markdown section starting with "## Summary of Activity", n
 
         cached_projects = load_projects_cache()
 
-        # Get descriptions for all mentioned repos
-        mentioned_repos = list(git_data["repos"].keys())
+        # Get descriptions for repos that actually have commits
+        mentioned_repos = [
+            repo_name
+            for repo_name, repo_data in git_data["repos"].items()
+            if repo_data.get("commits", 0) > 0
+        ]
 
         prompt = f"""Review and update these project descriptions:
 

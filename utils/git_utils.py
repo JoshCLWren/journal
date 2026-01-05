@@ -47,9 +47,7 @@ def get_commits_by_date(
     return commits
 
 
-def calculate_loc_changes(
-    repo_path: Path, date: str, author_name: str
-) -> tuple[int, int]:
+def calculate_loc_changes(repo_path: Path, date: str, author_name: str) -> tuple[int, int]:
     """Calculate lines added and deleted for a date."""
     start = f"{date} 00:00:00"
     end = f"{date} 23:59:59"
@@ -66,6 +64,33 @@ def calculate_loc_changes(
 
     added = 0
     deleted = 0
+    for line in output.strip().split("\n"):
+        if not line or line.startswith(" "):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            added += int(parts[0])
+            deleted += int(parts[1])
+
+    return added, deleted
+
+
+def calculate_loc_changes_for_hashes(repo_path: Path, commit_hashes: list[str]) -> tuple[int, int]:
+    """Calculate lines added and deleted for specific commit hashes."""
+    if not commit_hashes:
+        return 0, 0
+
+    added = 0
+    deleted = 0
+
+    output = run_git_command(
+        repo_path,
+        "show",
+        "--numstat",
+        "--pretty=tformat:",
+        *commit_hashes,
+    )
+
     for line in output.strip().split("\n"):
         if not line or line.startswith(" "):
             continue

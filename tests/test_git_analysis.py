@@ -77,7 +77,7 @@ class TestGitAnalysisAgent:
     @patch("agents.git_analysis.get_config")
     @patch("agents.git_analysis.is_work_day")
     @patch("agents.git_analysis.get_commits_by_date")
-    @patch("agents.git_analysis.calculate_loc_changes")
+    @patch("agents.git_analysis.calculate_loc_changes_for_hashes")
     def test_analyze_day_with_commits(
         self,
         mock_calculate_loc,
@@ -118,7 +118,7 @@ class TestGitAnalysisAgent:
     @patch("agents.git_analysis.get_config")
     @patch("agents.git_analysis.is_work_day")
     @patch("agents.git_analysis.get_commits_by_date")
-    @patch("agents.git_analysis.calculate_loc_changes")
+    @patch("agents.git_analysis.calculate_loc_changes_for_hashes")
     def test_analyze_day_multiple_repos(
         self,
         mock_calculate_loc,

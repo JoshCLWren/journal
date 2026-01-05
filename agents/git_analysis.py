@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import get_config
 from utils.git_utils import (
-    calculate_loc_changes,
+    calculate_loc_changes_for_hashes,
     categorize_commit,
     get_commits_by_date,
     is_work_day,
@@ -44,6 +44,8 @@ class GitAnalysisAgent:
         }
 
         repo_results = {}
+        seen_commit_hashes = set()
+        hash_to_repo = {}
 
         for repo_name in repos:
             repo_path = self.code_dir / repo_name
@@ -60,35 +62,50 @@ class GitAnalysisAgent:
             if not commits:
                 continue
 
-            loc_added, loc_deleted = calculate_loc_changes(repo_path, date, self.author_name)
+            unique_commits = []
+            for commit in commits:
+                if commit["hash"] not in seen_commit_hashes:
+                    seen_commit_hashes.add(commit["hash"])
+                    hash_to_repo[commit["hash"]] = repo_name
+                    unique_commits.append(commit)
 
-            commits_by_category = self._categorize_commits(commits)
-            top_features = self._extract_top_features(commits)
+            print(f"    Total: {len(commits)}, Unique: {len(unique_commits)}")
+
+            commits_by_category = self._categorize_commits(unique_commits)
+            top_features = self._extract_top_features(unique_commits)
+
+            unique_hashes = [c["hash"] for c in unique_commits]
+            loc_added, loc_deleted = calculate_loc_changes_for_hashes(repo_path, unique_hashes)
 
             repo_data = {
-                "commits": len(commits),
+                "commits": len(unique_commits),
+                "commits_total": len(commits),
                 "loc_added": loc_added,
                 "loc_deleted": loc_deleted,
                 "commits_by_category": commits_by_category,
                 "top_features": top_features,
                 "first_commit": commits[0]["timestamp"],
                 "last_commit": commits[-1]["timestamp"],
-                "commit_messages": [c["message"] for c in commits],
+                "commit_messages": [c["message"] for c in unique_commits],
+                "commit_hashes": unique_hashes,
             }
 
             repo_results[repo_name] = repo_data
 
-            results["total_commits"] += len(commits)
-            results["total_loc_added"] += loc_added
-            results["total_loc_deleted"] += loc_deleted
-
         results["repos"] = repo_results
+
+        results["total_commits"] = len(seen_commit_hashes)
         results["is_work_day"] = results["total_commits"] > 0
 
         if results["is_work_day"]:
+            for repo_data in repo_results.values():
+                results["total_loc_added"] += repo_data["loc_added"]
+                results["total_loc_deleted"] += repo_data["loc_deleted"]
             results["estimated_hours"] = self._estimate_hours(repo_results)
 
-        print(f"  ✓ Found {results['total_commits']} commits across {len(repo_results)} repos")
+        print(
+            f"  ✓ Found {results['total_commits']} unique commits across {len(repo_results)} repos"
+        )
         print(
             f"  ✓ ~{results['total_loc_added']:,} lines added, ~{results['total_loc_deleted']:,} deleted"
         )
