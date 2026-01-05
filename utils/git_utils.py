@@ -174,6 +174,10 @@ def stage_and_commit(repo_path: Path, file_path: Path, message: str) -> bool:
 
 def push_to_remote(repo_path: Path, remote: str = "origin", branch: str | None = None) -> bool:
     """Push commits to remote repository."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     try:
         cmd = ["git", "-C", str(repo_path), "push", remote]
         if branch:
@@ -184,11 +188,18 @@ def push_to_remote(repo_path: Path, remote: str = "origin", branch: str | None =
             check=False,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,
         )
+
+        if result.returncode != 0:
+            logger.error(f"Git push failed: {result.stderr}")
+        else:
+            logger.info(f"Git push successful to {remote}")
 
         return result.returncode == 0
     except subprocess.TimeoutExpired:
+        logger.error("Git push timed out after 120 seconds")
         return False
-    except Exception:
+    except Exception as e:
+        logger.error(f"Git push error: {e}")
         return False

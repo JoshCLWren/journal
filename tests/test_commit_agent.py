@@ -41,16 +41,6 @@ class TestCommitAgentInit:
         agent = CommitAgent()
 
         assert agent.journal_repo == Path("/tmp/test_journal").expanduser()
-        assert agent.auto_push is False
-
-    @patch("commit_agent.get_config")
-    def test_init_with_auto_push(self, mock_get_config, mock_config):
-        """Test initialization with auto_push enabled."""
-        mock_config["scheduling"]["auto_push"] = True
-        mock_get_config.return_value = mock_config
-        agent = CommitAgent()
-
-        assert agent.auto_push is True
 
 
 class TestCommitAgentCommitEntry:
@@ -179,28 +169,6 @@ class TestCommitAgentCommitWithGitCommands:
 
     @patch("commit_agent.get_config")
     @patch("subprocess.run")
-    def test_commit_with_git_commands_with_auto_push(
-        self, mock_run, mock_get_config, mock_config, sample_entry_path
-    ):
-        """Test _commit_with_git_commands with auto_push enabled."""
-        mock_config["scheduling"]["auto_push"] = True
-        mock_get_config.return_value = mock_config
-
-        mock_run.side_effect = [
-            MagicMock(returncode=0),
-            MagicMock(returncode=0, stdout="[abc123] Commit\n", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
-        ]
-
-        agent = CommitAgent()
-        date = datetime(2025, 12, 31)
-        result = agent._commit_with_git_commands(date, sample_entry_path)
-
-        assert result["success"] is True
-        assert mock_run.call_count == 3
-
-    @patch("commit_agent.get_config")
-    @patch("subprocess.run")
     def test_commit_with_git_commands_subprocess_error(
         self, mock_run, mock_get_config, mock_config
     ):
@@ -245,46 +213,3 @@ class TestCommitAgentGenerateCommitMessage:
         message = agent._generate_commit_message(date)
 
         assert message == "Add journal entry for January 01, 2026"
-
-
-class TestCommitAgentPushChanges:
-    """Test CommitAgent._push_changes method."""
-
-    @patch("commit_agent.get_config")
-    @patch("subprocess.run")
-    def test_push_changes_success(self, mock_run, mock_get_config, mock_config):
-        """Test _push_changes success."""
-        mock_get_config.return_value = mock_config
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-
-        agent = CommitAgent()
-        result = agent._push_changes()
-
-        assert result["success"] is True
-        assert result["error"] is None
-
-    @patch("commit_agent.get_config")
-    @patch("subprocess.run")
-    def test_push_changes_failure(self, mock_run, mock_get_config, mock_config):
-        """Test _push_changes failure."""
-        mock_get_config.return_value = mock_config
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Push failed")
-
-        agent = CommitAgent()
-        result = agent._push_changes()
-
-        assert result["success"] is False
-        assert result["error"] == "Push failed"
-
-    @patch("commit_agent.get_config")
-    @patch("subprocess.run")
-    def test_push_changes_exception(self, mock_run, mock_get_config, mock_config):
-        """Test _push_changes with exception."""
-        mock_get_config.return_value = mock_config
-        mock_run.side_effect = Exception("Network error")
-
-        agent = CommitAgent()
-        result = agent._push_changes()
-
-        assert result["success"] is False
-        assert "Network error" in result["error"]

@@ -17,7 +17,6 @@ class CommitAgent:
         """Initialize CommitAgent with config."""
         config = get_config()
         self.journal_repo = Path(config["general"]["journal_directory"]).expanduser()
-        self.auto_push = config["scheduling"].get("auto_push", False)
 
     def commit_entry(self, date: datetime, entry_path: Path) -> dict:
         """Stage and commit a journal entry.
@@ -114,9 +113,6 @@ class CommitAgent:
 
             commit_hash = result.stdout.strip().split()[1] if " " in result.stdout else None
 
-            if self.auto_push:
-                self._push_changes()
-
             return {
                 "success": True,
                 "commit_hash": commit_hash,
@@ -150,32 +146,6 @@ class CommitAgent:
         """
         date_str = date.strftime("%B %d, %Y")
         return f"Add journal entry for {date_str}"
-
-    def _push_changes(self) -> dict:
-        """Push commits to remote if configured.
-
-        Returns:
-            dict: Push result
-        """
-        import subprocess
-
-        try:
-            logger.info("Pushing changes to remote")
-
-            result = subprocess.run(
-                ["git", "push"], cwd=self.journal_repo, capture_output=True, text=True
-            )
-
-            if result.returncode != 0:
-                logger.warning(f"Git push failed: {result.stderr}")
-                return {"success": False, "error": result.stderr}
-
-            logger.info("Changes pushed successfully")
-            return {"success": True, "error": None}
-
-        except Exception as e:
-            logger.error(f"Error pushing changes: {e}", exc_info=True)
-            return {"success": False, "error": str(e)}
 
 
 def main():
