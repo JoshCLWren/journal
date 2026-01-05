@@ -2,8 +2,6 @@
 """Backfill missed journal entries."""
 
 import subprocess
-import sys
-from datetime import datetime, timedelta
 
 dates_to_run = ["2026-01-02", "2026-01-03", "2026-01-04"]
 

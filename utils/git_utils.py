@@ -170,3 +170,25 @@ def stage_and_commit(repo_path: Path, file_path: Path, message: str) -> bool:
         return result.returncode == 0
     except Exception:
         return False
+
+
+def push_to_remote(repo_path: Path, remote: str = "origin", branch: str | None = None) -> bool:
+    """Push commits to remote repository."""
+    try:
+        cmd = ["git", "-C", str(repo_path), "push", remote]
+        if branch:
+            cmd.append(branch)
+
+        result = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+    except Exception:
+        return False

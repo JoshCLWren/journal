@@ -13,7 +13,7 @@ from agents.content_generation import ContentGenerationAgent
 from agents.git_analysis import GitAnalysisAgent
 from config import get_config
 from opencode_client import OpenCodeClient
-from utils.git_utils import stage_and_commit
+from utils.git_utils import push_to_remote, stage_and_commit
 from utils.opencode_utils import ensure_opencode_running
 
 
@@ -411,6 +411,14 @@ class Orchestrator:
             if success:
                 summary["commit_hash"] = "committed"
                 print("  ✓ Final entry committed")
+
+                # Push to remote if configured
+                if self.config["scheduling"].get("auto_push", False):
+                    push_success = push_to_remote(self.journal_dir)
+                    if push_success:
+                        print("  ✓ Pushed to remote")
+                    else:
+                        print("  ⚠️  Failed to push to remote")
             else:
                 print("  ⚠️  Failed to commit final entry")
 
