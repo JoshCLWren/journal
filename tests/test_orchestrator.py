@@ -25,7 +25,6 @@ def mock_config():
         "opencode": {
             "model": "glm-4.7-free",
             "provider": "opencode",
-            "max_retries": 3,
         },
         "quality": {
             "min_commits_for_section": 3,

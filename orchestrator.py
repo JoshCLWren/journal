@@ -15,6 +15,7 @@ from config import get_config
 from opencode_client import OpenCodeClient
 from utils.git_utils import push_to_remote, stage_and_commit
 from utils.opencode_utils import ensure_opencode_running
+from utils.retry import MAX_TOTAL_TIME, fibonacci_retry
 
 
 class FactCheckingAgent:
@@ -247,94 +248,112 @@ class Orchestrator:
         """Run GitAnalysisAgent and commit results."""
         result = {"status": "pending", "is_work_day": False, "data": None}
 
-        for attempt in range(self.config["opencode"]["max_retries"]):
-            try:
-                git_data = self.git_agent.analyze_day(date)
-                result["data"] = git_data
-                result["is_work_day"] = git_data["is_work_day"]
-                result["status"] = "complete"
+        def git_analysis_callback(attempt_num: int, exception: Exception) -> bool:
+            print(f"  ⚠️  Git analysis attempt {attempt_num} failed: {exception}")
+            decision = self._get_opencode_decision(
+                f"Git analysis failed after {attempt_num} attempts: {str(exception)}. What should we do?",
+                ["retry", "abort", "skip_day"],
+            )
 
-                data_file = self.journal_dir / "tmp" / f"{date}_git_data.json"
-                data_file.parent.mkdir(parents=True, exist_ok=True)
-                data_file.write_text(json.dumps(git_data, indent=2))
+            if decision == "retry":
+                return True
+            elif decision == "skip_day":
+                result["status"] = "skipped"
+                result["error"] = str(exception)
+                summary["errors"].append(str(exception))
+                return False
+            else:
+                result["status"] = "failed"
+                result["error"] = str(exception)
+                summary["errors"].append(str(exception))
+                return False
 
-                if self.config["quality"]["commit_as_they_go"]:
-                    stage_and_commit(self.journal_dir, data_file, f"git-analysis: Data for {date}")
-                    print("  ✓ Committed git_data.json")
+        def git_analysis_operation():
+            git_data = self.git_agent.analyze_day(date)
+            result["data"] = git_data
+            result["is_work_day"] = git_data["is_work_day"]
+            result["status"] = "complete"
 
-                return result
+            data_file = self.journal_dir / "tmp" / f"{date}_git_data.json"
+            data_file.parent.mkdir(parents=True, exist_ok=True)
+            data_file.write_text(json.dumps(git_data, indent=2))
 
-            except Exception as e:
-                print(f"  ⚠️  Git analysis attempt {attempt + 1} failed: {e}")
-                if attempt == self.config["opencode"]["max_retries"] - 1:
-                    decision = self._get_opencode_decision(
-                        f"Git analysis failed after {attempt + 1} attempts: {str(e)}. What should we do?",
-                        ["retry", "abort", "skip_day"],
-                    )
+            if self.config["quality"]["commit_as_they_go"]:
+                stage_and_commit(self.journal_dir, data_file, f"git-analysis: Data for {date}")
+                print("  ✓ Committed git_data.json")
 
-                    if decision == "retry":
-                        continue
-                    elif decision == "skip_day":
-                        result["status"] = "skipped"
-                        return result
-                    else:
-                        result["status"] = "failed"
-                        result["error"] = str(e)
-                        summary["errors"].append(str(e))
-                        return result
+            return git_data
 
-        result["status"] = "failed"
-        result["error"] = "Max retries exceeded"
-        summary["errors"].append(result["error"])
+        try:
+            fibonacci_retry(
+                git_analysis_operation,
+                max_total_time=MAX_TOTAL_TIME,
+                callback=git_analysis_callback,
+                operation_name="Git analysis",
+            )
+        except Exception as e:
+            if result["status"] == "pending":
+                result["status"] = "failed"
+                result["error"] = str(e)
+                summary["errors"].append(str(e))
+
         return result
 
     def _run_content_generation(self, git_data: dict, summary: dict) -> dict:
         """Run ContentGenerationAgent and commit results."""
         result = {"status": "pending", "full_markdown": ""}
 
-        for attempt in range(self.config["opencode"]["max_retries"]):
-            try:
-                content_result = self.content_agent.generate_entry(git_data)
-                result.update(content_result)
+        def content_generation_callback(attempt_num: int, exception: Exception) -> bool:
+            print(f"  ⚠️  Content generation attempt {attempt_num} failed: {exception}")
+            decision = self._get_opencode_decision(
+                f"Content generation failed after {attempt_num} attempts: {str(exception)}. What should we do?",
+                ["retry", "abort", "use_fallback"],
+            )
 
-                if result["status"] == "complete":
-                    entry_path = self._get_entry_path(git_data["date"])
-                    entry_path.parent.mkdir(parents=True, exist_ok=True)
-                    entry_path.write_text(result["full_markdown"])
+            if decision == "retry":
+                return True
+            elif decision == "use_fallback":
+                result["status"] = "fallback"
+                result["full_markdown"] = self._generate_fallback_content(git_data)
+                return False
+            else:
+                result["status"] = "failed"
+                result["error"] = str(exception)
+                summary["errors"].append(str(exception))
+                return False
 
-                    if self.config["quality"]["commit_as_they_go"]:
-                        stage_and_commit(
-                            self.journal_dir,
-                            entry_path,
-                            f"draft: Journal entry for {git_data['date']}",
-                        )
-                        print("  ✓ Committed content.md")
+        def content_generation_operation():
+            content_result = self.content_agent.generate_entry(git_data)
+            result.update(content_result)
 
-                return result
+            if result["status"] == "complete":
+                entry_path = self._get_entry_path(git_data["date"])
+                entry_path.parent.mkdir(parents=True, exist_ok=True)
+                entry_path.write_text(result["full_markdown"])
 
-            except Exception as e:
-                print(f"  ⚠️  Content generation attempt {attempt + 1} failed: {e}")
-                if attempt == self.config["opencode"]["max_retries"] - 1:
-                    decision = self._get_opencode_decision(
-                        f"Content generation failed after {attempt + 1} attempts: {str(e)}. What should we do?",
-                        ["retry", "abort", "use_fallback"],
+                if self.config["quality"]["commit_as_they_go"]:
+                    stage_and_commit(
+                        self.journal_dir,
+                        entry_path,
+                        f"draft: Journal entry for {git_data['date']}",
                     )
+                    print("  ✓ Committed content.md")
 
-                    if decision == "retry":
-                        continue
-                    elif decision == "use_fallback":
-                        result["status"] = "fallback"
-                        result["full_markdown"] = self._generate_fallback_content(git_data)
-                        return result
-                    else:
-                        result["status"] = "failed"
-                        result["error"] = str(e)
-                        summary["errors"].append(str(e))
-                        return result
+            return content_result
 
-        result["status"] = "failed"
-        result["error"] = "Max retries exceeded"
-        summary["errors"].append(result["error"])
+        try:
+            fibonacci_retry(
+                content_generation_operation,
+                max_total_time=MAX_TOTAL_TIME,
+                callback=content_generation_callback,
+                operation_name="Content generation",
+            )
+        except Exception as e:
+            if result["status"] == "pending":
+                result["status"] = "failed"
+                result["error"] = str(e)
+                summary["errors"].append(str(e))
+
         return result
 
     def _run_parallel_checks(self, content: str, git_data: dict, summary: dict) -> tuple:

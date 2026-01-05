@@ -11,12 +11,7 @@ DEFAULT_CONFIG = {
         "code_directory": str(Path.home() / "code"),
         "journal_directory": str(Path.home() / "code" / "journal"),
         "log_file": str(
-            Path.home()
-            / ".local"
-            / "share"
-            / "journal-automation"
-            / "logs"
-            / "journal.log"
+            Path.home() / ".local" / "share" / "journal-automation" / "logs" / "journal.log"
         ),
     },
     "scheduling": {
@@ -39,7 +34,6 @@ DEFAULT_CONFIG = {
         "model": "glm-4.7-free",
         "provider": "opencode",
         "max_workers": 5,
-        "max_retries": 3,
         "fallback_enabled": True,
     },
     "quality": {

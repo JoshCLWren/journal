@@ -127,8 +127,7 @@ Edit `~/.journalrc`:
   },
   "opencode": {
     "model": "glm-4.7-free",
-    "max_workers": 5,
-    "max_retries": 3
+    "max_workers": 5
   },
   "quality": {
     "min_commits_for_section": 3,
