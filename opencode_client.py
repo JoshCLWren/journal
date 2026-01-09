@@ -42,7 +42,11 @@ class OpenCodeClient:
         return self.session_id
 
     def chat(
-        self, message: str, model: str = "glm-4.7-free", provider: str = "opencode"
+        self,
+        message: str,
+        model: str = "glm-4.7-free",
+        provider: str = "opencode",
+        timeout: int = 600,
     ) -> dict[str, Any]:
         """Send a message to the OpenCode LLM.
 
@@ -50,6 +54,7 @@ class OpenCodeClient:
             message: Message to send
             model: Model ID to use
             provider: Provider ID to use
+            timeout: Request timeout in seconds (default: 600 = 10 minutes)
 
         Returns:
             Dictionary with 'content' and 'data' keys
@@ -66,6 +71,7 @@ class OpenCodeClient:
             f"{self.base_url}/session/{self.session_id}/message",
             json=payload,
             stream=True,
+            timeout=timeout,
         )
         r.raise_for_status()
 
@@ -84,14 +90,19 @@ class OpenCodeClient:
         return {"content": full_response, "data": {}}
 
     def chat_stream(
-        self, message: str, model: str = "glm-4.7-free", provider: str = "opencode"
+        self,
+        message: str,
+        model: str = "glm-4.7-free",
+        provider: str = "opencode",
+        timeout: int = 600,
     ) -> Iterator[str]:
-        """Send a message and stream the response.
+        """Send a message and stream response.
 
         Args:
             message: Message to send
             model: Model ID to use
             provider: Provider ID to use
+            timeout: Request timeout in seconds (default: 600 = 10 minutes)
 
         Yields:
             Text chunks as they arrive
@@ -108,6 +119,7 @@ class OpenCodeClient:
             f"{self.base_url}/session/{self.session_id}/message",
             json=payload,
             stream=True,
+            timeout=timeout,
         )
         r.raise_for_status()
 
