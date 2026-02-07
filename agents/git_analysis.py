@@ -14,7 +14,6 @@ from utils.git_utils import (
     calculate_loc_changes_for_hashes,
     categorize_commit,
     get_commits_by_date,
-    is_work_day,
 )
 
 
@@ -52,11 +51,6 @@ class GitAnalysisAgent:
 
             if not self._should_scan_repo(repo_name):
                 continue
-
-            if not is_work_day(repo_path, date, self.author_name):
-                continue
-
-            print(f"  📁 {repo_name}")
 
             commits = get_commits_by_date(repo_path, date, self.author_name)
             if not commits:

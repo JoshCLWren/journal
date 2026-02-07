@@ -80,6 +80,10 @@ class ContentGenerationAgent:
         if not git_data["is_work_day"]:
             return "No development activity on this date."
 
+        # Check if fallback mode is enabled (skip OpenCode)
+        if self.config["opencode"].get("fallback_enabled", False):
+            return self._generate_summary_fallback(git_data)
+
         prompt = f"""You are analyzing a day of development work.
 
 Commit Data:
@@ -94,13 +98,36 @@ Style: Concise, professional, similar to existing journal entries.
 
 Respond ONLY with the summary text, no additional commentary."""
 
-        response = self.client.chat(
-            message=prompt,
-            model=self.config["opencode"]["model"],
-            provider=self.config["opencode"]["provider"],
-        )
+        try:
+            response = self.client.chat(
+                message=prompt,
+                model=self.config["opencode"]["model"],
+                provider=self.config["opencode"]["provider"],
+                timeout=60,
+            )
+            return response.get("content", "").strip()
+        except Exception as e:
+            print(f"    ⚠️  OpenCode timeout/error for summary: {e}")
+            return self._generate_summary_fallback(git_data)
 
-        return response.get("content", "").strip()
+    def _generate_summary_fallback(self, git_data: dict) -> str:
+        """Generate summary without OpenCode."""
+        top_repos = sorted(git_data["repos"].items(), key=lambda x: x[1]["commits"], reverse=True)[
+            :3
+        ]
+
+        repo_names = ", ".join([f"`{r[0]}`" for r in top_repos])
+        commit_count = git_data["total_commits"]
+        hours = git_data["estimated_hours"]
+
+        if hours > 8:
+            intensity = "intensive"
+        elif hours > 4:
+            intensity = "moderate"
+        else:
+            intensity = "light"
+
+        return f"Day of {intensity} development work across {commit_count} commits. Primary focus on {repo_names}."
 
     def _generate_repositories_section(self, git_data: dict) -> str:
         """Generate repositories section."""
@@ -125,6 +152,11 @@ Respond ONLY with the summary text, no additional commentary."""
 
         for repo_name, repo_data in git_data["repos"].items():
             if repo_data["commits"] < min_commits:
+                sections[repo_name] = self._generate_project_section_fallback(repo_name, repo_data)
+                continue
+
+            if self.config["opencode"].get("fallback_enabled", False):
+                sections[repo_name] = self._generate_project_section_fallback(repo_name, repo_data)
                 continue
 
             prompt = f"""You are analyzing commits for repository: {repo_name}
@@ -156,15 +188,29 @@ Example format:
 
 Respond ONLY with the markdown section, no additional commentary."""
 
-            response = self.client.chat(
-                message=prompt,
-                model=self.config["opencode"]["model"],
-                provider=self.config["opencode"]["provider"],
-            )
-
-            sections[repo_name] = response.get("content", "").strip()
+            try:
+                response = self.client.chat(
+                    message=prompt,
+                    model=self.config["opencode"]["model"],
+                    provider=self.config["opencode"]["provider"],
+                    timeout=60,
+                )
+                sections[repo_name] = response.get("content", "").strip()
+            except Exception as e:
+                print(f"    ⚠️  OpenCode timeout/error for {repo_name}: {e}, using fallback")
+                sections[repo_name] = self._generate_project_section_fallback(repo_name, repo_data)
 
         return sections
+
+    def _generate_project_section_fallback(self, repo_name: str, repo_data: dict) -> str:
+        """Generate project section without OpenCode."""
+        lines = [f"## {repo_name}", ""]
+
+        for msg in repo_data.get("top_features", repo_data.get("commit_messages", []))[:10]:
+            lines.append(f"- {msg}")
+
+        lines.append("")
+        return "\n".join(lines)
 
     def _generate_activity_summary(
         self, git_data: dict, generated_sections: dict | None = None
@@ -172,6 +218,9 @@ Respond ONLY with the markdown section, no additional commentary."""
         """Generate summary of activities."""
         if not git_data["is_work_day"]:
             return ""
+
+        if self.config["opencode"].get("fallback_enabled", False):
+            return self._generate_activity_summary_fallback(git_data)
 
         prompt = f"""Based on the generated journal entry content, create a "Summary of Activity" section that:
 
@@ -191,17 +240,34 @@ Style: Professional, action-oriented, matches existing journal entries.
 
 Respond ONLY with the markdown section starting with "## Summary of Activity", no additional commentary."""
 
-        response = self.client.chat(
-            message=prompt,
-            model=self.config["opencode"]["model"],
-            provider=self.config["opencode"]["provider"],
-        )
+        try:
+            response = self.client.chat(
+                message=prompt,
+                model=self.config["opencode"]["model"],
+                provider=self.config["opencode"]["provider"],
+                timeout=60,
+            )
+            return response.get("content", "").strip()
+        except Exception as e:
+            print(f"    ⚠️  OpenCode timeout/error for activity summary: {e}, using fallback")
+            return self._generate_activity_summary_fallback(git_data)
 
-        return response.get("content", "").strip()
+    def _generate_activity_summary_fallback(self, git_data: dict) -> str:
+        """Generate activity summary without OpenCode."""
+        lines = ["## Summary of Activity", ""]
+        lines.append(
+            f"1. Completed {git_data['total_commits']} commits across {len(git_data['repos'])} repositories"
+        )
+        lines.append(f"2. Modified ~{git_data['total_loc_added']:,} lines of code")
+        lines.append(f"3. Estimated {git_data['estimated_hours']:.1f} hours of development work")
+        lines.append("")
+
+        return "\n".join(lines)
 
     def _generate_projects_legend(self, git_data: dict) -> str:
         """Generate projects legend section."""
-        from utils.cache import load_projects_cache
+        from utils.cache import load_projects_cache, save_projects_cache
+        from utils.git_utils import get_repo_description
 
         cached_projects = load_projects_cache()
 
@@ -212,57 +278,26 @@ Respond ONLY with the markdown section starting with "## Summary of Activity", n
             if repo_data.get("commits", 0) > 0
         ]
 
-        prompt = f"""Review and update these project descriptions:
+        # Update cache with any missing repos using git descriptions
+        for repo_name in mentioned_repos:
+            if repo_name not in cached_projects:
+                repo_path = Path(self.config["general"]["code_directory"]) / repo_name
+                desc = get_repo_description(repo_path)
+                cached_projects[repo_name] = desc or "See repo README for details"
 
-{json.dumps(cached_projects, indent=2)}
+        # Save updated cache
+        save_projects_cache(cached_projects)
 
-Mentioned in today's journal entry: {", ".join(mentioned_repos)}
+        # Generate markdown legend
+        lines = ["---", "", "## Projects Legend", ""]
 
-For each mentioned project:
-1. Keep existing descriptions if accurate
-2. Suggest updates if description seems outdated
-3. Add new projects if missing
+        for repo_name in sorted(mentioned_repos):
+            desc = cached_projects.get(repo_name, "See repo README for details")
+            lines.append(f"### {repo_name}")
+            lines.append(desc)
+            lines.append("")
 
-Respond with updated projects in JSON format: {{"repo_name": "description", ...}}
-
-If no updates needed, return existing cache as-is."""
-
-        response = self.client.chat(
-            message=prompt,
-            model=self.config["opencode"]["model"],
-            provider=self.config["opencode"]["provider"],
-        )
-
-        content = response.get("content", "{}")
-
-        try:
-            updated_projects = json.loads(content)
-
-            # Update cache
-            from utils.cache import save_projects_cache
-
-            save_projects_cache(updated_projects)
-
-            # Generate markdown legend
-            lines = ["---", "", "## Projects Legend", ""]
-
-            for repo_name, description in sorted(updated_projects.items()):
-                lines.append(f"### {repo_name}")
-                lines.append(f"{description}")
-                lines.append("")
-
-            return "\n".join(lines)
-
-        except json.JSONDecodeError:
-            # Fallback to simple listing
-            lines = ["---", "", "## Projects Legend", ""]
-            for repo_name in mentioned_repos:
-                desc = cached_projects.get(repo_name, "See repo README for details")
-                lines.append(f"### {repo_name}")
-                lines.append(desc)
-                lines.append("")
-
-            return "\n".join(lines)
+        return "\n".join(lines)
 
     def _assemble_full_markdown(self, result: dict, git_data: dict) -> str:
         """Assemble all sections into complete markdown."""

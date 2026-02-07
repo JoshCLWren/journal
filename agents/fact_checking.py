@@ -40,9 +40,13 @@ class FactCheckingAgent:
             result["checks"]["duplicates"] = self._check_duplicates(markdown_content)
             result["checks"]["anomalies"] = self._check_anomalies(git_data, markdown_content)
 
-            result["reasoning"] = self._generate_llm_analysis(
-                git_data, markdown_content, result["checks"]
-            )
+            # Skip LLM analysis if fallback mode is enabled
+            if not self.config["opencode"].get("fallback_enabled", False):
+                result["reasoning"] = self._generate_llm_analysis(
+                    git_data, markdown_content, result["checks"]
+                )
+            else:
+                result["reasoning"] = "LLM analysis skipped (fallback mode)"
 
             self._compile_results(result)
 
@@ -262,10 +266,11 @@ Respond ONLY with the analysis paragraph, no additional commentary or formatting
                 message=prompt,
                 model=self.config["opencode"]["model"],
                 provider=self.config["opencode"]["provider"],
+                timeout=60,
             )
             return response.get("content", "").strip()
         except Exception as e:
-            return f"LLM analysis failed: {str(e)}"
+            return f"LLM analysis unavailable: {str(e)}"
 
     def _compile_results(self, result: dict) -> None:
         """Compile all check results into final output."""

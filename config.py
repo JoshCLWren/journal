@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
         "model": "glm-4.7-free",
         "provider": "opencode",
         "max_workers": 5,
-        "fallback_enabled": True,
+        "fallback_enabled": False,
     },
     "quality": {
         "min_commits_for_section": 3,
