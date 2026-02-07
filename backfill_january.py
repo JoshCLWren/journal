@@ -49,7 +49,7 @@ def main():
                 print(f"  ✓ Entry created: {result.get('entry_path')}")
                 success_count += 1
             elif result["status"] == "no_work":
-                print(f"  ℹ No work on this date")
+                print("  ℹ No work on this date")
                 skip_count += 1
             else:
                 print(f"  ✗ Failed: {result.get('error', 'Unknown error')}")
@@ -58,7 +58,7 @@ def main():
         current_date += timedelta(days=1)
 
     print("\n" + "=" * 60)
-    print(f"Backfill complete:")
+    print("Backfill complete:")
     print(f"  - Created: {success_count}")
     print(f"  - Skipped: {skip_count}")
     print(f"  - Failed: {fail_count}")
