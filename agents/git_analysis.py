@@ -68,8 +68,15 @@ class GitAnalysisAgent:
             commits_by_category = self._categorize_commits(unique_commits)
             top_features = self._extract_top_features(unique_commits)
 
+            # Skip repos with no unique commits
+            if not unique_commits:
+                continue
+
             unique_hashes = [c["hash"] for c in unique_commits]
             loc_added, loc_deleted = calculate_loc_changes_for_hashes(repo_path, unique_hashes)
+
+            # Sort unique commits by timestamp to get correct first/last
+            sorted_commits = sorted(unique_commits, key=lambda c: c["timestamp"])
 
             repo_data = {
                 "commits": len(unique_commits),
@@ -78,8 +85,8 @@ class GitAnalysisAgent:
                 "loc_deleted": loc_deleted,
                 "commits_by_category": commits_by_category,
                 "top_features": top_features,
-                "first_commit": commits[0]["timestamp"],
-                "last_commit": commits[-1]["timestamp"],
+                "first_commit": sorted_commits[0]["timestamp"],
+                "last_commit": sorted_commits[-1]["timestamp"],
                 "commit_messages": [c["message"] for c in unique_commits],
                 "commit_hashes": unique_hashes,
             }
@@ -178,35 +185,73 @@ class GitAnalysisAgent:
         return features[:5]  # Return top 5
 
     def _estimate_hours(self, repo_results: dict[str, dict]) -> float:
-        """Estimate hours worked based on commit timestamps."""
+        """Estimate actual active hours by merging commit timestamps across all repos."""
+        # Collect all commit timestamps across all repos
         all_timestamps = []
+        for _repo_name, repo_data in repo_results.items():
+            if "commits" not in repo_data or repo_data["commits"] == 0:
+                continue
 
-        for repo_data in repo_results.values():
-            if "first_commit" in repo_data and "last_commit" in repo_data:
-                all_timestamps.append(repo_data["first_commit"])
-                all_timestamps.append(repo_data["last_commit"])
+            # Add minimum time for repos with few commits
+            if repo_data["commits"] <= 2:
+                all_timestamps.append((repo_data["first_commit"], 0.25))  # 15 min minimum
+                continue
+
+            all_timestamps.append((repo_data["first_commit"], repo_data["last_commit"]))
 
         if not all_timestamps:
             return 0.0
 
-        # Find earliest and latest
-        timestamps_sorted = sorted(all_timestamps)
-        first = datetime.fromisoformat(timestamps_sorted[0])
-        last = datetime.fromisoformat(timestamps_sorted[-1])
+        # Convert to datetime objects and sort by start time
+        sessions = []
+        for start_str, end_data in all_timestamps:
+            if isinstance(end_data, str):
+                start = datetime.fromisoformat(start_str)
+                end = datetime.fromisoformat(end_data)
+                duration_hours = (end - start).total_seconds() / 3600
+                sessions.append((start, end, duration_hours))
+            else:
+                # It's a minimum time entry (start_str, min_hours)
+                sessions.append((datetime.fromisoformat(start_str), None, end_data))
 
-        # Calculate span in hours
-        span_hours = (last - first).total_seconds() / 3600
+        # Sort by start time
+        sessions.sort(key=lambda x: x[0])
 
-        # Apply adjustment factor (based on December patterns: ~12-15 commits/hour)
-        total_commits = sum(r["commits"] for r in repo_results.values())
-        if span_hours > 0:
-            commits_per_hour = total_commits / span_hours
-            # If commits/hour is very high (>20), they're probably working faster
-            # If commits/hour is very low (<5), they're probably doing other work
-            adjustment = max(0.5, min(2.0, 10 / commits_per_hour)) if commits_per_hour > 0 else 1.0
-            return span_hours * adjustment
+        # Merge overlapping or nearby sessions (gap < 2 hours = same session)
+        merged_sessions = []
+        gap_threshold_hours = 2.0
 
-        return span_hours
+        for start, end, duration in sessions:
+            if end is None:
+                # Minimum time entry - just add the duration
+                merged_sessions.append(duration)
+            else:
+                if not merged_sessions or isinstance(merged_sessions[-1], float):
+                    # Start new session
+                    merged_sessions.append([start, end])
+                else:
+                    last_start, last_end = merged_sessions[-1]
+                    gap = (start - last_end).total_seconds() / 3600
+
+                    if gap < gap_threshold_hours:
+                        # Merge with previous session
+                        merged_sessions[-1][1] = max(merged_sessions[-1][1], end)
+                    else:
+                        # Start new session
+                        merged_sessions.append([start, end])
+
+        # Calculate total hours
+        total_hours = 0.0
+        for session in merged_sessions:
+            if isinstance(session, float):
+                total_hours += session
+            else:
+                start, end = session
+                session_hours = (end - start).total_seconds() / 3600
+                # Cap individual sessions at 8 hours (realistic max continuous work)
+                total_hours += min(session_hours, 8.0)
+
+        return round(total_hours, 1)
 
 
 if __name__ == "__main__":
